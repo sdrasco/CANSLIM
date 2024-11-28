@@ -1,7 +1,20 @@
 import os
 import pandas as pd
 import matplotlib.pyplot as plt
+import logging
 from config.settings import DATA_DIR
+
+# Configure basic logging.  show warning or higher for external modules.
+logging.basicConfig(
+    level=logging.WARNING,  
+    format='%(message)s'
+)
+
+# Create a logger for this module
+logger = logging.getLogger(__name__)
+
+# Show info level logger events for this module
+logger.setLevel(logging.INFO)
 
 # Base directory for data files
 base_data_dir = os.path.join(DATA_DIR, "us_stocks_sip/day_aggs_v1")
@@ -11,7 +24,6 @@ def process_file(file_path):
     Process a single file. Extracts the date from the file path,
     calculates the average volume, and returns it.
     """
-    print(f"Processing: {file_path}")
     try:
         # Extract date from the file name
         file_name = os.path.basename(file_path)
@@ -24,7 +36,7 @@ def process_file(file_path):
         avg_volume = df['volume'].mean()
         return date, avg_volume
     except Exception as e:
-        print(f"Error processing {file_path}: {e}")
+        logger.error(f"Error processing {file_path}: {e}")
         return None, None
 
 def collect_data(base_dir):
@@ -70,4 +82,4 @@ if __name__ == "__main__":
     if collected_data:
         plot_data(collected_data)
     else:
-        print("No data to plot.")
+        logger.error("No data to plot.")

@@ -13,7 +13,7 @@ The project currently consists of the following modules:
 - **`config/settings.py`:** Stores configuration parameters such as API keys, file paths, and date ranges.
 
 ### **Downloaded Data**
-The `day_aggs_v1` dataset is being downloaded from September 1, 2003, to November 27, 2024. The data is organized in a directory structure that mirrors Polygon.io's flat file hierarchy:
+The `day_aggs_v1` dataset has been downloaded from September 1, 2003, to November 27, 2024. The data is organized in a directory structure that mirrors Polygon.io's flat file hierarchy:
 
 ```
 data/

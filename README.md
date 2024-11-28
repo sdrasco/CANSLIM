@@ -7,13 +7,14 @@ This is a Python-based system for both backtesting and live trading using the CA
 ## Current Progress and Directory Structure
 
 ### **Code Structure**
-The project currently consists of the following modules:
-- **`data_fetcher.py`:** Automates downloading daily aggregate stock data (`day_aggs_v1`) from Polygon.io's S3-compatible flat files. It ensures files are only downloaded if they don't already exist locally.
-- **`data_processor.py`:** A script for loading, exploring, and preprocessing the downloaded data. It generates basic visualizations, such as average volume over time.
+The project is just getting started.  It currently consists of the following parts:
+- **`data/data_fetcher.py`:** Automates downloading daily aggregate stock data from Polygon.io's S3-compatible flat files. Files are only downloaded if they don't already exist locally.
+- **`data/data_processor.py`:** A script for loading, exploring, and preprocessing the downloaded data. It generates basic visualizations, such as average volume over time.
 - **`config/settings.py`:** Stores configuration parameters such as API keys, file paths, and date ranges.
+- **`main.py`:** An execution script that runs the others.
 
 ### **Downloaded Data**
-The `day_aggs_v1` dataset has been downloaded from September 1, 2003, to November 27, 2024. The data is organized in a directory structure that mirrors Polygon.io's flat file hierarchy:
+The `day_aggs_v1` dataset running from September 1, 2003, to the present has been pulled and stored locally. It isn't stored here on github due to its size. The data is organized in a directory structure that mirrors Polygon.io's flat file hierarchy:
 
 ```
 data/
@@ -37,9 +38,9 @@ data/
 ```
 
 ### **Data Fetching Logic**
-- Files are downloaded only if they do not already exist locally.
+- Files are downloaded only if they don't already exist locally.
 - The script uses a directory structure identical to Polygon.io's flat file hierarchy to store the data.
-- Data is downloaded incrementally, starting from September 2003 through November 2024.
+- Data is downloaded incrementally, starting from September 2003 to the present.
 
 ## Using the Virtual Environment (`venv`)
 

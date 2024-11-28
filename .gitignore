@@ -21,6 +21,5 @@ Icon?
 *.log
 *.tmp
 
-# Ignore all .csv and .csv.gz files in the data directory
-data/*.csv
-data/*.csv.gz
+# Ignore all flat files from polygon
+data/us_stocks_sip/*

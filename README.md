@@ -4,6 +4,43 @@ This is a Python-based system for both backtesting and live trading using the CA
 
 > *Disclaimer: O'Neil and his book aren't my favorite. I'm not a fan of his snake-oil-selling tone, his "cups and saucers in the charts" fantasies, or his patriotic propaganda. Still, implementing and testing his CANSLIM strategy is a straightforward and sound project.*
 
+## Current Progress and Directory Structure
+
+### **Code Structure**
+The project currently consists of the following modules:
+- **`data_fetcher.py`:** Automates downloading daily aggregate stock data (`day_aggs_v1`) from Polygon.io's S3-compatible flat files. It ensures files are only downloaded if they don't already exist locally.
+- **`data_processor.py`:** A script for loading, exploring, and preprocessing the downloaded data. It generates basic visualizations, such as average volume over time.
+- **`config/settings.py`:** Stores configuration parameters such as API keys, file paths, and date ranges.
+
+### **Downloaded Data**
+The `day_aggs_v1` dataset is being downloaded from September 1, 2003, to November 27, 2024. The data is organized in a directory structure that mirrors Polygon.io's flat file hierarchy:
+
+```
+data/
+└── us_stocks_sip/
+    └── day_aggs_v1/
+        ├── 2003/
+        │   └── 09/
+        │       ├── 2003-09-10.csv.gz
+        │       ├── 2003-09-11.csv.gz
+        │       └── ...
+        ├── 2004/
+        │   └── ...
+        └── 2024/
+            ├── 10/
+            │   ├── 2024-10-01.csv.gz
+            │   ├── 2024-10-02.csv.gz
+            │   └── ...
+            └── 11/
+                ├── 2024-11-01.csv.gz
+                └── ...
+```
+
+### **Data Fetching Logic**
+- Files are downloaded only if they do not already exist locally.
+- The script uses a directory structure identical to Polygon.io's flat file hierarchy to store the data.
+- Data is downloaded incrementally, starting from September 2003 through November 2024.
+
 ## Using the Virtual Environment (`venv`)
 
 To keep dependencies isolated and ensure a clean development setup, this project uses a Python virtual environment. Follow these steps to create and use the `venv`:

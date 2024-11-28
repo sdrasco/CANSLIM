@@ -2,7 +2,7 @@
 
 This is a Python-based system for both backtesting and live trading using the CANSLIM methodology as described by William J. O'Neil in *How to Make Money in Stocks*. 
 
-> *Disclaimer: O'Neil and his book aren't my favorite. I'm not a fan of his snake-oil-selling tone, his "cups and saucers in the charts" fantasies, or his patriotic propaganda. Still, implementing and testing his CANSLIM strategy is a straightforward and sound project.*
+> *Disclaimer: O'Neil and his book aren't my favorite, but implementing and testing his strategy is a straightforward and fun project.*
 
 ## Current Progress and Directory Structure
 

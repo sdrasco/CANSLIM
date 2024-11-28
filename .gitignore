@@ -20,3 +20,7 @@ Icon?
 # Logs and temporary files
 *.log
 *.tmp
+
+# Ignore all .csv and .csv.gz files in the data directory
+data/*.csv
+data/*.csv.gz

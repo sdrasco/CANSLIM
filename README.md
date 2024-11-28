@@ -14,7 +14,7 @@ The project is just getting started.  It currently consists of the following par
 - **`main.py`:** An execution script that runs the others.
 
 ### **Downloaded Data**
-The `day_aggs_v1` dataset running from September 1, 2003, to the present has been pulled and stored locally. It isn't stored here on github due to its size. The data is organized in a directory structure that mirrors Polygon.io's flat file hierarchy:
+The `day_aggs_v1` dataset running from September 1, 2003, to the present has been pulled and stored locally. It isn't kept here on github due to licenseing (and size), but any polygon API tier can access to it. The data is organized in the following directory structure:
 
 ```
 data/
@@ -39,12 +39,12 @@ data/
 
 ### **Data Fetching Logic**
 - Files are downloaded only if they don't already exist locally.
-- The script uses a directory structure identical to Polygon.io's flat file hierarchy to store the data.
-- Data is downloaded incrementally, starting from September 2003 to the present.
+- The directory structure is identical to Polygon.io's flat file hierarchy, from which the data was obtained.
+- Data is downloaded incrementally.
 
 ## Using the Virtual Environment (`venv`)
 
-To keep dependencies isolated and ensure a clean development setup, this project uses a Python virtual environment. Follow these steps to create and use the `venv`:
+To keep dependencies isolated and ensure a clean shareable development setup, this project uses a Python virtual environment. Follow these steps to create and use the `venv`:
 
 ### 1. Create the Virtual Environment
 Run the following command in the project directory:

@@ -36,4 +36,4 @@ object_key = 'us_stocks_sip/trades_v1/2024/03/2024-03-07.csv.gz'  # Example path
 local_file_path = './' + object_key.split('/')[-1]
 
 # Download the file
-#s3.download_file(bucket_name, object_key, local_file_path)
+s3.download_file(bucket_name, object_key, local_file_path)

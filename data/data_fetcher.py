@@ -1,6 +1,8 @@
 import os
 import boto3
 import logging
+import gzip
+import pandas as pd
 from datetime import datetime, timedelta
 from botocore.config import Config
 from config.settings import (
@@ -25,9 +27,7 @@ logger.setLevel(logging.INFO)
 
 def fetch_data():
     """
-    Downloads missing data from Polygon.io's flat file system.
-    Local files are checked before querying the server, and START_DATE is
-    adjusted based on the most recent local file.
+    Downloads missing data from Polygon.io's flat file system and saves them directly in Feather format.
     """
     # Initialize the S3 session and client
     session = boto3.Session(
@@ -41,36 +41,44 @@ def fetch_data():
         config=Config(signature_version='s3v4'),
     )
 
-    # Define base directory and make sure it exists
-    base_data_dir = os.path.join(DATA_DIR, "us_stocks_sip")
-    os.makedirs(base_data_dir, exist_ok=True)
+    # Define the Feather data directory and ensure it exists
+    feather_data_dir = os.path.join(DATA_DIR, "us_stocks_sip/day_aggs_feather")
+    os.makedirs(feather_data_dir, exist_ok=True)
 
-    # Adjust START_DATE based on local files
-    start_date = adjust_start_date(START_DATE, DATA_DIR)
+    # Adjust START_DATE based on local Feather files
+    start_date = adjust_start_date(START_DATE, feather_data_dir)
 
     # Generate a list of all expected files
     expected_files = generate_expected_files(start_date, END_DATE)
 
-    # Find missing files by comparing to local files
-    missing_files = find_missing_files(expected_files, DATA_DIR)
+    # Find missing files by comparing to Feather files
+    missing_files = find_missing_files(expected_files, feather_data_dir)
 
-    # Download missing files if they exist on the server
+    # Download and process missing files
     for file_key in missing_files:
-        local_file_path = os.path.join(DATA_DIR, file_key)
+        feather_file_path = os.path.join(
+            feather_data_dir, file_key.replace(".csv.gz", ".feather")
+        )
 
         # Create necessary directories
-        os.makedirs(os.path.dirname(local_file_path), exist_ok=True)
+        os.makedirs(os.path.dirname(feather_file_path), exist_ok=True)
 
         try:
             # Check if the file exists on the server
             s3.head_object(Bucket=POLYGON_BUCKET, Key=file_key)
 
             # Download the file
-            logger.info(f"Downloading {file_key} to {local_file_path}")
-            s3.download_file(POLYGON_BUCKET, file_key, local_file_path)
+            logger.info(f"Downloading {file_key}")
+            with gzip.open(s3.get_object(Bucket=POLYGON_BUCKET, Key=file_key)["Body"], "rb") as f_in:
+                df = pd.read_csv(f_in)
+
+            # Convert the data to Feather format
+            logger.info(f"Saving data as Feather: {feather_file_path}")
+            df.to_feather(feather_file_path)
+
         except s3.exceptions.ClientError as e:
-            error_code = e.response['Error']['Code']
-            if error_code == '404':
+            error_code = e.response["Error"]["Code"]
+            if error_code == "404":
                 # Silently skip holidays
                 continue
             else:
@@ -78,22 +86,21 @@ def fetch_data():
                 logger.error(f"Error checking or downloading file: {file_key}")
                 raise
 
-def adjust_start_date(start_date, data_dir):
+def adjust_start_date(start_date, feather_data_dir):
     """
-    Adjust the START_DATE to the date of the most recent local file.
+    Adjust the START_DATE to the date of the most recent local Feather file.
     If no files are found, return the original start_date.
     """
-    local_files_dir = os.path.join(data_dir, "us_stocks_sip", "day_aggs_v1")
     latest_date = None
 
-    # Traverse the directory structure and find the most recent file by date in the filename
-    for root, _, files in os.walk(local_files_dir):
+    # Traverse the Feather directory and find the most recent file by date in the filename
+    for root, _, files in os.walk(feather_data_dir):
         for file_name in files:
-            if file_name.endswith(".csv.gz"):
+            if file_name.endswith(".feather"):
                 try:
-                    # Extract the date from the file name (e.g., YYYY-MM-DD.csv.gz)
+                    # Extract the date from the file name (e.g., YYYY-MM-DD.feather)
                     file_date_str = file_name.split(".")[0]
-                    file_date = datetime.strptime(file_date_str, "%Y-%m-%d").date()  # Ensure date type
+                    file_date = datetime.strptime(file_date_str, "%Y-%m-%d").date()
                     if not latest_date or file_date > latest_date:
                         latest_date = file_date
                 except ValueError:
@@ -139,15 +146,17 @@ def generate_expected_files(start_date, end_date):
 
     return expected_files
 
-def find_missing_files(expected_files, data_dir):
+def find_missing_files(expected_files, feather_data_dir):
     """
-    Identify files that are missing locally by comparing to expected files.
+    Identify files that are missing locally by comparing to expected Feather files.
     """
     missing_files = []
 
     for file_key in expected_files:
-        local_file_path = os.path.join(data_dir, file_key)
-        if not os.path.exists(local_file_path):
+        feather_file_path = os.path.join(
+            feather_data_dir, file_key.replace(".csv.gz", ".feather")
+        )
+        if not os.path.exists(feather_file_path):
             missing_files.append(file_key)
 
     return missing_files

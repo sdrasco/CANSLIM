@@ -21,13 +21,13 @@ logging.basicConfig(
     format="%(message)s"
 )
 
-# Create a logger for this module
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 def fetch_data():
     """
     Downloads missing data from Polygon.io's flat file system and saves them directly in Feather format.
+    Validates the Feather files against the original CSV data to ensure correctness.
     """
     # Initialize the S3 session and client
     session = boto3.Session(
@@ -36,9 +36,9 @@ def fetch_data():
     )
 
     s3 = session.client(
-        's3',
+        "s3",
         endpoint_url=POLYGON_S3_ENDPOINT,
-        config=Config(signature_version='s3v4'),
+        config=Config(signature_version="s3v4"),
     )
 
     # Define the Feather data directory and ensure it exists
@@ -70,11 +70,14 @@ def fetch_data():
             # Download the file
             logger.info(f"Downloading {file_key}")
             with gzip.open(s3.get_object(Bucket=POLYGON_BUCKET, Key=file_key)["Body"], "rb") as f_in:
-                df = pd.read_csv(f_in)
+                original_df = pd.read_csv(f_in)
 
             # Convert the data to Feather format
             logger.info(f"Saving data as Feather: {feather_file_path}")
-            df.to_feather(feather_file_path)
+            original_df.to_feather(feather_file_path)
+
+            # Validation: Reload Feather and compare
+            validate_conversion(original_df, feather_file_path)
 
         except s3.exceptions.ClientError as e:
             error_code = e.response["Error"]["Code"]
@@ -85,6 +88,27 @@ def fetch_data():
                 # Log and raise unexpected errors
                 logger.error(f"Error checking or downloading file: {file_key}")
                 raise
+
+
+def validate_conversion(original_df, feather_file_path):
+    """
+    Validates that the Feather file matches the original CSV data.
+    Compares the original DataFrame to the one loaded from the Feather file.
+    """
+    logger.info(f"Validating Feather file: {feather_file_path}")
+    try:
+        # Load the Feather file
+        converted_df = pd.read_feather(feather_file_path)
+
+        # Check if the dataframes are equal
+        if not original_df.equals(converted_df):
+            logger.error(f"Validation failed for {feather_file_path}: Data mismatch.")
+            raise ValueError(f"Data mismatch in {feather_file_path}")
+        logger.info(f"Validation passed for {feather_file_path}")
+    except Exception as e:
+        logger.error(f"Validation error for {feather_file_path}: {e}")
+        raise
+
 
 def adjust_start_date(start_date, feather_data_dir):
     """
@@ -113,6 +137,7 @@ def adjust_start_date(start_date, feather_data_dir):
     else:
         logger.info("No local files found. Fetching whole collection.")
         return start_date
+
 
 def generate_expected_files(start_date, end_date):
     """
@@ -145,6 +170,7 @@ def generate_expected_files(start_date, end_date):
         current_date += timedelta(days=1)
 
     return expected_files
+
 
 def find_missing_files(expected_files, feather_data_dir):
     """

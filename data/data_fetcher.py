@@ -1,7 +1,7 @@
 import os
 import boto3
 import logging
-from datetime import timedelta
+from datetime import datetime, timedelta
 from botocore.config import Config
 from config.settings import (
     POLYGON_S3_KEY,
@@ -13,22 +13,21 @@ from config.settings import (
     END_DATE,
 )
 
-# Configure basic logging.  show warning or higher for external modules.
+# Configure basic logging
 logging.basicConfig(
-    level=logging.WARNING,  
-    format='%(message)s'
+    level=logging.WARNING,
+    format="%(message)s"
 )
 
 # Create a logger for this module
 logger = logging.getLogger(__name__)
-
-# Show info level logger events for this module
 logger.setLevel(logging.INFO)
 
 def fetch_data():
     """
     Downloads missing data from Polygon.io's flat file system.
-    Local files are checked before querying the server.
+    Local files are checked before querying the server, and START_DATE is
+    adjusted based on the most recent local file.
     """
     # Initialize the S3 session and client
     session = boto3.Session(
@@ -46,8 +45,11 @@ def fetch_data():
     base_data_dir = os.path.join(DATA_DIR, "us_stocks_sip")
     os.makedirs(base_data_dir, exist_ok=True)
 
+    # Adjust START_DATE based on local files
+    start_date = adjust_start_date(START_DATE, DATA_DIR)
+
     # Generate a list of all expected files
-    expected_files = generate_expected_files(START_DATE, END_DATE)
+    expected_files = generate_expected_files(start_date, END_DATE)
 
     # Find missing files by comparing to local files
     missing_files = find_missing_files(expected_files, DATA_DIR)
@@ -76,15 +78,40 @@ def fetch_data():
                 logger.error(f"Error checking or downloading file: {file_key}")
                 raise
 
+def adjust_start_date(start_date, data_dir):
+    """
+    Adjust the START_DATE to the date of the most recent local file.
+    If no files are found, return the original start_date.
+    """
+    local_files_dir = os.path.join(data_dir, "us_stocks_sip", "day_aggs_v1")
+    latest_date = None
+
+    # Traverse the directory structure and find the most recent file by date in the filename
+    for root, _, files in os.walk(local_files_dir):
+        for file_name in files:
+            if file_name.endswith(".csv.gz"):
+                try:
+                    # Extract the date from the file name (e.g., YYYY-MM-DD.csv.gz)
+                    file_date_str = file_name.split(".")[0]
+                    file_date = datetime.strptime(file_date_str, "%Y-%m-%d").date()  # Ensure date type
+                    if not latest_date or file_date > latest_date:
+                        latest_date = file_date
+                except ValueError:
+                    continue  # Skip files that don't match the expected format
+
+    # Return the day after the most recent file date, or the original start_date if no files exist
+    if latest_date:
+        logger.info(f"Most recent local file date: {latest_date.strftime('%Y-%m-%d')}")
+        return latest_date + timedelta(days=1)
+    else:
+        logger.info("No local files found. Fetching whole collection.")
+        return start_date
+
 def generate_expected_files(start_date, end_date):
     """
     Generate a list of all expected file paths based on the date range,
     excluding Saturdays, Sundays, fixed holidays, and future dates.
     """
-    from datetime import timedelta
-
-    # List of fixed stock holidays to exclude (MM-DD format)
-    # We could do better, but a decent start here and the others will be caught.
     fixed_holidays = [
         "01-01",  # New Year's Day
         "07-04",  # Independence Day
@@ -92,34 +119,25 @@ def generate_expected_files(start_date, end_date):
     ]
 
     expected_files = []
-
     current_date = start_date
+
     while current_date <= end_date:
         weekday = current_date.weekday()  # 0 = Monday, 6 = Sunday
         mm_dd = f"{current_date.month:02d}-{current_date.day:02d}"
 
-        # Skip Saturdays (5) and Sundays (6)
-        if weekday >= 5:
+        if weekday >= 5 or mm_dd in fixed_holidays:
             current_date += timedelta(days=1)
             continue
 
-        # Skip fixed holidays
-        if mm_dd in fixed_holidays:
-            current_date += timedelta(days=1)
-            continue
-
-        # Add the file path for valid trading days
         file_path = (
             f"us_stocks_sip/day_aggs_v1/{current_date.year:04d}/"
             f"{current_date.month:02d}/{current_date.year:04d}-"
             f"{current_date.month:02d}-{current_date.day:02d}.csv.gz"
         )
         expected_files.append(file_path)
-
         current_date += timedelta(days=1)
 
     return expected_files
-
 
 def find_missing_files(expected_files, data_dir):
     """

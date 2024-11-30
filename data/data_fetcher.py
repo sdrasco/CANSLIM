@@ -5,6 +5,7 @@ import gzip
 import pandas as pd
 from datetime import datetime, timedelta
 from botocore.config import Config
+from config.configure_logging import configure_logging
 from config.settings import (
     POLYGON_S3_KEY,
     POLYGON_S3_SECRET,
@@ -15,14 +16,11 @@ from config.settings import (
     END_DATE,
 )
 
-# Configure basic logging
-logging.basicConfig(
-    level=logging.WARNING,
-    format="%(message)s"
-)
+# Configure logging
+configure_logging()
 
+# Create a logger for this module
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
 
 def fetch_data():
     """

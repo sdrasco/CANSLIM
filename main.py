@@ -3,16 +3,13 @@ import logging
 from data.data_fetcher import fetch_data
 from data.data_processor import collect_data, plot_data
 from config.settings import DATA_DIR, START_DATE, END_DATE
+from config.configure_logging import configure_logging
 
-# Configure basic logging
-logging.basicConfig(
-    level=logging.WARNING,
-    format="%(message)s"
-)
+# Configure logging
+configure_logging()
 
 # Create a logger for this module
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
 
 def main():
     # Define Feather data directory

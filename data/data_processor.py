@@ -3,16 +3,13 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import logging
 from config.settings import DATA_DIR
+from config.configure_logging import configure_logging
 
-# Configure basic logging
-logging.basicConfig(
-    level=logging.WARNING,
-    format="%(message)s"
-)
+# Configure logging
+configure_logging()
 
 # Create a logger for this module
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
 
 # Base directory for Feather data files
 base_data_dir = os.path.join(DATA_DIR, "us_stocks_sip/day_aggs_feather")

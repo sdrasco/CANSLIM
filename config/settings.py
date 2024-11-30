@@ -1,18 +1,13 @@
+from config.configure_logging import configure_logging
 import logging
 import os
 from datetime import date, timedelta
 
-# Configure basic logging.  show warning or higher for external modules.
-logging.basicConfig(
-    level=logging.WARNING,  
-    format='%(message)s'
-)
+# Configure logging
+configure_logging()
 
 # Create a logger for this module
 logger = logging.getLogger(__name__)
-
-# Show info level logger events for this module
-logger.setLevel(logging.INFO)
 
 # Base directory for storing data
 DATA_DIR = "./data/"

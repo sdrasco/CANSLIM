@@ -2,6 +2,7 @@ from config.configure_logging import configure_logging
 import logging
 import os
 from datetime import date, timedelta
+from pathlib import Path
 
 # Configure logging
 configure_logging()
@@ -10,7 +11,7 @@ configure_logging()
 logger = logging.getLogger(__name__)
 
 # Base directory for storing data
-DATA_DIR = "./data/"
+DATA_DIR = Path("./data/")
 
 # Date range for downloading data
 # Full starting date

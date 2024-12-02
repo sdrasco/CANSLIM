@@ -23,3 +23,6 @@ Icon?
 
 # Ignore all flat files from polygon
 data/us_stocks_sip/*
+
+# Ignore processed data output
+data/processed_data.feather

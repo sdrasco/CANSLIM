@@ -3,8 +3,10 @@ import boto3
 import logging
 import gzip
 import pandas as pd
+from pathlib import Path
 from datetime import datetime, timedelta
 from botocore.config import Config
+from botocore.exceptions import ClientError
 from config.configure_logging import configure_logging
 from config.settings import (
     POLYGON_S3_KEY,
@@ -40,8 +42,8 @@ def fetch_data():
     )
 
     # Define the Feather data directory and ensure it exists
-    feather_data_dir = os.path.join(DATA_DIR, "us_stocks_sip/day_aggs_feather")
-    os.makedirs(feather_data_dir, exist_ok=True)
+    feather_data_dir = Path(DATA_DIR) / "us_stocks_sip/day_aggs_feather"
+    feather_data_dir.mkdir(parents=True, exist_ok=True)
 
     # Adjust START_DATE based on local Feather files
     start_date = adjust_start_date(START_DATE, feather_data_dir)
@@ -77,16 +79,21 @@ def fetch_data():
             # Validation: Reload Feather and compare
             validate_conversion(original_df, feather_file_path)
 
-        except s3.exceptions.ClientError as e:
-            error_code = e.response["Error"]["Code"]
+        except ClientError as e:
+            error_code = e.response.get("Error", {}).get("Code", "")
             if error_code == "404":
-                # Silently skip holidays
+                # Silently skip holidays or missing files
+                logger.warning(f"File not found on server: {file_key} (404 error)")
                 continue
             else:
                 # Log and raise unexpected errors
-                logger.error(f"Error checking or downloading file: {file_key}")
+                logger.error(f"Error checking or downloading file: {file_key} - {e}")
                 raise
 
+        except Exception as e:
+            # Log any unexpected errors during the download and processing
+            logger.error(f"Unexpected error for file {file_key}: {e}")
+            raise
 
 def validate_conversion(original_df, feather_file_path):
     """
@@ -169,18 +176,22 @@ def generate_expected_files(start_date, end_date):
 
     return expected_files
 
-
 def find_missing_files(expected_files, feather_data_dir):
     """
     Identify files that are missing locally by comparing to expected Feather files.
     """
+    feather_data_dir = Path(feather_data_dir)  # Ensure it's a Path object
     missing_files = []
 
     for file_key in expected_files:
-        feather_file_path = os.path.join(
-            feather_data_dir, file_key.replace(".csv.gz", ".feather")
-        )
-        if not os.path.exists(feather_file_path):
+        # Remove the 'us_stocks_sip/day_aggs_v1/' prefix
+        relative_file_key = file_key.replace("us_stocks_sip/day_aggs_v1/", "")
+        # Convert to Feather file path
+        relative_feather_path = relative_file_key.replace(".csv.gz", ".feather")
+        # Construct the full local path
+        local_feather_path = feather_data_dir / relative_feather_path
+        # Check if the local Feather file exists
+        if not local_feather_path.exists():
             missing_files.append(file_key)
 
     return missing_files

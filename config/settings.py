@@ -29,3 +29,32 @@ if not POLYGON_S3_KEY or not POLYGON_S3_SECRET:
 # S3-specific settings
 POLYGON_S3_ENDPOINT = "https://files.polygon.io"
 POLYGON_BUCKET = "flatfiles"
+
+#
+# Ticker for market index proxy
+# Uncomment the desired index-tracking ETF and ensure only one is uncommented
+#
+# S&P 500 ETFs
+INDEX_PROXY_TICKER = "SPY"  # SPDR S&P 500 ETF Trust (default)
+# INDEX_PROXY_TICKER = "IVV"  # iShares Core S&P 500 ETF
+
+# Nasdaq-100 ETFs
+# INDEX_PROXY_TICKER = "QQQ"  # Invesco QQQ Trust
+
+# Dow Jones Industrial Average ETFs
+# INDEX_PROXY_TICKER = "DIA"  # SPDR Dow Jones Industrial Average ETF Trust
+
+# Total Market ETFs
+# INDEX_PROXY_TICKER = "VTI"  # Vanguard Total Stock Market ETF
+
+# Sector ETFs (example: technology-heavy sectors)
+# INDEX_PROXY_TICKER = "XLK"  # Technology Select Sector SPDR Fund
+# INDEX_PROXY_TICKER = "XLY"  # Consumer Discretionary Select Sector SPDR Fund
+
+# International Market ETFs
+# INDEX_PROXY_TICKER = "EFA"  # iShares MSCI EAFE ETF (Developed Markets ex-U.S.)
+# INDEX_PROXY_TICKER = "VEA"  # Vanguard FTSE Developed Markets ETF
+# INDEX_PROXY_TICKER = "EWJ"  # iShares MSCI Japan ETF
+
+# Emerging Market ETFs
+# INDEX_PROXY_TICKER = "EEM"  # iShares MSCI Emerging Markets ETF

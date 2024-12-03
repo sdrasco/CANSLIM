@@ -26,3 +26,4 @@ data/us_stocks_sip/*
 
 # Ignore processed data output
 data/processed_data.feather
+data/financials.feather

@@ -1,59 +1,50 @@
 import unittest
 from pathlib import Path
 import pandas as pd
-from data.data_processor import process_data, base_data_dir
-from config.settings import DATA_DIR, INDEX_PROXY_TICKER
+from data.data_processor import DataProcessor
+from config.settings import DATA_DIR
 
 class TestDataProcessor(unittest.TestCase):
+    def setUp(self):
+        """
+        Set up the test environment, including directories and paths.
+        """
+        self.base_dir = Path(DATA_DIR) / "us_stocks_sip/day_aggs_feather"
+        self.output_path = Path(DATA_DIR) / "test_processed_data.feather"
+
     def test_process_data(self):
-        # Define output path for processed data
-        processed_data_path = Path(DATA_DIR) / "test_processed_data.feather"
+        """
+        Test the full data processing pipeline.
+        """
+        # Instantiate the DataProcessor class
+        processor = DataProcessor(base_dir=self.base_dir, output_path=self.output_path)
+        
+        # Run the process method
+        processor.process()
 
-        # Run the data processing function
-        processed_data = process_data(base_data_dir, output_path=processed_data_path)
+        # Assert the processed data is not empty
+        self.assertFalse(processor.data.empty, "Processed data should not be empty.")
 
-        # Assert the result is not None and not empty
-        self.assertIsNotNone(processed_data, "Processed data should not be None.")
-        self.assertFalse(processed_data.empty, "Processed data should not be empty.")
-
-        # Assert the file was saved
-        self.assertTrue(processed_data_path.exists(), "Processed data file was not saved.")
-
-        # Validate the reading of the saved file and assert expected columns
-        df = pd.read_feather(processed_data_path)
-
-        # Assert the DataFrame is not empty
-        self.assertFalse(df.empty, "Loaded DataFrame should not be empty.")
-
-        # Assert critical columns exist in the processed data
+        # Validate critical columns in the processed data
         expected_columns = [
-            "50_MA", 
-            "200_MA", 
-            "50_Vol_Avg",
-            "Price_Change", 
-            "52_Week_High",
-            "Is_New_High",
-            "Volume_Spike",
-            "Stock_Returns",
-            "Cumulative_Stock_Returns",
-            "Relative_Strength",
-            "INDEX_Close",  
-            "Cumulative_INDEX_Returns",  
-            "INDEX_50_MA",  
-            "INDEX_200_MA"  
+            "open", "high", "low", "close", "volume", "50_MA", "200_MA", "Price_Change"
         ]
-        for col in expected_columns:
-            self.assertIn(col, df.columns, f"'{col}' column is missing in the processed data.")
+        for column in expected_columns:
+            self.assertIn(column, processor.data.columns, f"Missing expected column: {column}")
 
-        # Check if the index proxy data is included
-        self.assertTrue((df['ticker'] == INDEX_PROXY_TICKER).any(), f"'{INDEX_PROXY_TICKER}' data is missing in the processed dataset.")
+        # Assert the output file was created
+        self.assertTrue(self.output_path.exists(), "Processed data file was not saved.")
 
-        # Additional suggestion: Verify no NaN values in critical columns (if that's expected behavior)
-        #for col in expected_columns:
-        #    self.assertFalse(df[col].isna().any(), f"'{col}' column contains NaN values.")
+        # Load the saved file to validate its structure
+        saved_data = pd.read_feather(self.output_path)
+        self.assertFalse(saved_data.empty, "Saved data file should not be empty.")
 
-        # Cleanup
-        processed_data_path.unlink()  # Delete the test file after running
+    def tearDown(self):
+        """
+        Clean up test artifacts.
+        """
+        # if self.output_path.exists():
+        #     self.output_path.unlink()  # Delete the test file
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,221 +1,249 @@
-# data_processor.py
-
 import os
 import pandas as pd
 import numpy as np
 import logging
+import httpx
+import asyncio
 from pathlib import Path
-from config.settings import DATA_DIR
+from config.settings import DATA_DIR, START_DATE, END_DATE, POLYGON_API_KEY
 from config.configure_logging import configure_logging
-from config.settings import INDEX_PROXY_TICKER
 
 # Configure logging
 configure_logging()
 logger = logging.getLogger(__name__)
 
-# Base directory for Feather data files
-base_data_dir = Path(DATA_DIR) / "us_stocks_sip/day_aggs_feather"
+class DataProcessor:
+    def __init__(self, base_dir, output_path=None):
+        self.base_dir = base_dir
+        self.output_path = output_path
+        self.data = pd.DataFrame()
 
-def load_file(file_path):
-    """
-    Load a single Feather file and add a 'date' column extracted from the filename.
-    """
-    try:
-        logger.debug(f"Loading Feather file: {file_path}")
-        df = pd.read_feather(file_path)
-        
-        # Extract date from filename
-        date_str = file_path.stem  # e.g., '2024-10-01'
-        file_date = pd.to_datetime(date_str)
-        df['date'] = file_date
+    def load_and_combine_data(self):
+        data_frames = []
+        for file_path in Path(self.base_dir).rglob("*.feather"):
+            df = self.load_file(file_path)
+            if not df.empty:
+                data_frames.append(df)
+        self.data = pd.concat(data_frames, ignore_index=True) if data_frames else pd.DataFrame()
+        logger.info(f"Combined data shape: {self.data.shape}")
 
-        return df
-    except Exception as e:
-        logger.error(f"Error loading {file_path}: {e}")
-        return pd.DataFrame() 
+    def load_file(self, file_path):
+        try:
+            df = pd.read_feather(file_path)
+            df['date'] = pd.to_datetime(file_path.stem)  # e.g., '2024-10-01'
+            return df
+        except Exception as e:
+            logger.error(f"Error loading {file_path}: {e}")
+            return pd.DataFrame()
 
-def load_and_combine_data(base_dir):
-    """
-    Traverse the directory structure, load Feather files, and combine into a single DataFrame.
-    """
-    data_frames = []
-    for file_path in base_dir.rglob("*.feather"):
-        df = load_file(file_path)
-        if not df.empty:
-            data_frames.append(df)
-    if data_frames:
-        combined_data = pd.concat(data_frames, ignore_index=True)
-        logger.info(f"Combined data shape: {combined_data.shape}")
-        return combined_data
-    else:
-        logger.warning("No data frames to combine.")
-        return pd.DataFrame()
+    def validate_data(self):
+        required_columns = {'date', 'ticker', 'open', 'high', 'low', 'close', 'volume'}
+        missing_columns = required_columns - set(self.data.columns)
+        if missing_columns:
+            logger.error(f"Missing columns: {missing_columns}")
+            return False
+        return True
 
-def validate_data(data):
-    """
-    Validate that essential columns exist in the data.
-    """
-    required_columns = {'date', 'ticker', 'open', 'high', 'low', 'close', 'volume', 'window_start', 'transactions'}
-    missing_columns = required_columns - set(data.columns)
-    if missing_columns:
-        logger.error(f"Missing required columns: {missing_columns}")
-        return False
-    return True
+    def clean_data(self):
+        if not self.validate_data():
+            logger.error("Data validation failed. Exiting cleaning step.")
+            self.data = pd.DataFrame()
+            return
+        self.data.drop_duplicates(inplace=True)
+        self.data.ffill(inplace=True)
+        self.data.bfill(inplace=True)
+        logger.info("Data cleaning completed.")
 
-def clean_data(data):
-    """
-    Clean the combined data.
-    """
-    if not validate_data(data):
-        logger.error("Data validation failed. Exiting data cleaning step.")
-        return pd.DataFrame()
+    def feature_engineering(self):
+        if self.data.empty:
+            logger.warning("No data for feature engineering.")
+            return
+        self.data.sort_values(by=['ticker', 'date'], inplace=True)
+        self.data['50_MA'] = self.data.groupby('ticker')['close'].transform(lambda x: x.rolling(window=50).mean())
+        self.data['200_MA'] = self.data.groupby('ticker')['close'].transform(lambda x: x.rolling(window=200).mean())
+        self.data['50_Vol_Avg'] = self.data.groupby('ticker')['volume'].transform(lambda x: x.rolling(window=50).mean())
+        self.data['Price_Change'] = self.data.groupby('ticker')['close'].pct_change().fillna(0)
+        logger.info("Feature engineering completed.")
 
-    # Remove duplicates
-    data = data.drop_duplicates()
-    logger.debug("Removed duplicates.")
+    async def fetch_data_for_ticker(self, ticker, endpoint, params, client):
+        url = f"https://api.polygon.io{endpoint}"
+        params["ticker"] = ticker
+        params["apiKey"] = POLYGON_API_KEY
+        try:
+            response = await client.get(url, params=params)
+            response.raise_for_status()
+            data = response.json()
+            return pd.DataFrame(data["results"]) if "results" in data else pd.DataFrame()
+        except Exception as e:
+            logger.error(f"Error fetching {endpoint} for {ticker}: {e}")
+            return pd.DataFrame()
 
-    # Handle missing values
-    missing_before = data.isnull().sum()
-    data = data.ffill().bfill()
-    missing_after = data.isnull().sum()
-    logger.debug(f"Missing values before cleaning: {missing_before}")
-    logger.debug(f"Missing values after cleaning: {missing_after}")
+    async def fetch_all_data(self, tickers, endpoint, params, max_concurrent_requests=100):
+        semaphore = asyncio.Semaphore(max_concurrent_requests)
+        async with httpx.AsyncClient() as client:
+            async def sem_fetch(ticker):
+                async with semaphore:
+                    return await self.fetch_data_for_ticker(ticker, endpoint, params, client)
+            tasks = [sem_fetch(ticker) for ticker in tickers]
+            return dict(zip(tickers, await asyncio.gather(*tasks, return_exceptions=True)))
 
-    return data
+    async def fetch_splits(self, tickers, max_concurrent_requests=10):
+        return await self.fetch_all_data(tickers, "/v3/reference/splits", {"execution_date.gte": START_DATE, "execution_date.lte": END_DATE}, max_concurrent_requests)
 
-def feature_engineering(data):
-    logger.debug("Starting feature engineering.")
+    async def fetch_name_changes(self, tickers, max_concurrent_requests=10):
+        """
+        Fetch ticker name changes for multiple tickers concurrently with semaphore control.
 
-    # Ensure data is sorted by 'ticker' and 'date'
-    data = data.sort_values(by=['ticker', 'date'])
+        Parameters:
+            tickers (list): List of ticker symbols.
+            max_concurrent_requests (int): Maximum number of concurrent requests.
 
-    # Moving Averages
-    data['50_MA'] = data.groupby('ticker')['close'].transform(lambda x: x.rolling(window=50, min_periods=1).mean())
-    data['200_MA'] = data.groupby('ticker')['close'].transform(lambda x: x.rolling(window=200, min_periods=1).mean())
+        Returns:
+            dict: A dictionary mapping tickers to their fetched name change DataFrames.
+        """
+        semaphore = asyncio.Semaphore(max_concurrent_requests)
 
-    # Fill missing values in moving averages with nearest available data
-    data['50_MA'] = data.groupby('ticker')['50_MA'].transform(lambda x: x.ffill().bfill())
-    data['200_MA'] = data.groupby('ticker')['200_MA'].transform(lambda x: x.ffill().bfill())
+        async with httpx.AsyncClient() as client:
+            async def sem_fetch_name_change(ticker):
+                async with semaphore:
+                    url = f"https://api.polygon.io/vX/reference/tickers/{ticker}/events?apiKey={POLYGON_API_KEY}"
+                    try:
+                        response = await client.get(url)
+                        if response.status_code == 404:
+                            # 404 is expected for tickers with no name changes
+                            return pd.DataFrame()
 
-    # Volume Average
-    data['50_Vol_Avg'] = data.groupby('ticker')['volume'].transform(lambda x: x.rolling(window=50, min_periods=1).mean())
-    data['50_Vol_Avg'] = data.groupby('ticker')['50_Vol_Avg'].transform(lambda x: x.ffill().bfill())
+                        response.raise_for_status()
+                        data = response.json()
 
-    # Price Change Percentages
-    data['Price_Change'] = data.groupby('ticker')['close'].pct_change()
+                        # Only log and return meaningful results
+                        if data.get("results"):
+                            valid_results = [
+                                result for result in data["results"]
+                                if all(key in result for key in ["old_ticker", "new_ticker", "event_date"])
+                            ]
+                            if valid_results:
+                                logger.info(f"Found name changes for ticker {ticker}.")
+                                return pd.DataFrame(valid_results)
 
-    # Handle NaN for the first row of each ticker
-    first_date_mask = data.groupby('ticker')['date'].transform('min') == data['date']
-    data.loc[first_date_mask, 'Price_Change'] = 0
+                    except Exception as e:
+                        logger.error(f"Unexpected error fetching name changes for {ticker}: {e}")
 
-    # New 52-week High Indicator
-    data['52_Week_High'] = data.groupby('ticker')['close'].transform(lambda x: x.rolling(window=252, min_periods=1).max())
-    data['Is_New_High'] = data['close'] >= data['52_Week_High'].shift(1)
+                    # Ignore tickers without valid name changes
+                    return pd.DataFrame()
 
-    # Volume Spike Indicator
-    data['Volume_Spike'] = data['volume'] >= data['50_Vol_Avg'] * 1.5
+            tasks = [sem_fetch_name_change(ticker) for ticker in tickers]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
 
-    # Relative Strength using the market index proxy
-    index_data = data[data['ticker'] == INDEX_PROXY_TICKER]
-    if index_data.empty:
-        logger.error(f"Index proxy data for '{INDEX_PROXY_TICKER}' is missing. Relative Strength cannot be calculated.")
-        return data
+        return dict(zip(tickers, results))
 
-    # Ensure index data contains necessary columns
-    index_data = index_data[['date', 'close']].rename(columns={'close': 'INDEX_Close'})
+    async def fetch_dividends(self, tickers, max_concurrent_requests=10):
+        return await self.fetch_all_data(tickers, "/v3/reference/dividends", {"ex_dividend_date.gte": START_DATE, "ex_dividend_date.lte": END_DATE}, max_concurrent_requests)
 
-    # Merge index data into the full dataset
-    data = data.merge(index_data, on='date', how='left')
+    def apply_splits(self, splits_dict):
+        """
+        Apply stock splits to the dataset.
 
-    # Calculate stock and index returns
-    data['Stock_Returns'] = data.groupby('ticker')['close'].pct_change().fillna(0)
-    data['INDEX_Returns'] = data['INDEX_Close'].pct_change().fillna(0)
+        Parameters:
+            splits_dict (dict): Dictionary of ticker splits dataframes.
+        """
+        for ticker, splits in splits_dict.items():
+            if splits.empty:
+                continue
+            splits = splits.sort_values(by="execution_date", ascending=False)
+            for _, split in splits.iterrows():
+                split_date = pd.to_datetime(split['execution_date'])
+                split_factor = float(split['split_to']) / float(split['split_from'])
+                mask = (self.data['ticker'] == ticker) & (self.data['date'] < split_date)
 
-    # Calculate cumulative returns
-    data['Cumulative_Stock_Returns'] = np.exp(np.log1p(data['Stock_Returns']).groupby(data['ticker']).cumsum())
-    data['Cumulative_INDEX_Returns'] = np.exp(np.log1p(data['INDEX_Returns']).cumsum())
+                # Adjust volume and price columns
+                self.data.loc[mask, 'volume'] = (self.data.loc[mask, 'volume'] / split_factor).round().astype('int64')
+                self.data.loc[mask, ['open', 'high', 'low', 'close']] *= split_factor
 
-    # Calculate Relative Strength
-    data['Relative_Strength'] = data['Cumulative_Stock_Returns'] / data['Cumulative_INDEX_Returns']
+                logger.info(f"Applied split for {ticker}: {split['split_from']} for {split['split_to']} on {split['execution_date']}.")
 
-    # Replace infinite values with NaN safely
-    data.loc[:, 'Relative_Strength'] = data['Relative_Strength'].replace([np.inf, -np.inf], np.nan)
+    def apply_name_changes(self, name_changes_dict):
+        """
+        Apply ticker name changes to the dataset.
 
-    # Fill NaN values safely
-    data.loc[:, 'Relative_Strength'] = data['Relative_Strength'].ffill()
+        Parameters:
+            name_changes_dict (dict): Dictionary of ticker name changes dataframes.
+        """
+        for ticker, name_changes in name_changes_dict.items():
+            if name_changes.empty:
+                continue
+            for _, change in name_changes.iterrows():
+                old_ticker = change['old_ticker']
+                new_ticker = change['new_ticker']
+                change_date = pd.to_datetime(change['event_date'])
 
-    # Market Direction Indicators
-    data['INDEX_50_MA'] = data['INDEX_Close'].rolling(window=50, min_periods=1).mean()
-    data['INDEX_200_MA'] = data['INDEX_Close'].rolling(window=200, min_periods=1).mean()
+                # Update ticker in the dataset
+                mask = (self.data['ticker'] == old_ticker) & (self.data['date'] >= change_date)
+                self.data.loc[mask, 'ticker'] = new_ticker
 
-    logger.debug("Feature engineering completed.")
-    return data
+                logger.info(f"Applied ticker name change: {old_ticker} to {new_ticker} on {change_date}.")
 
-def structure_data(data):
-    """
-    Set index and sort data for efficient access.
-    """
-    # Convert 'date' to datetime if not already
-    data['date'] = pd.to_datetime(data['date'])
+    def apply_dividends(self, dividends_dict):
+        """
+        Apply dividend adjustments to the dataset.
 
-    # Set multi-index with 'date' and 'ticker'
-    data.set_index(['date', 'ticker'], inplace=True)
-    data.sort_index(inplace=True)
-    logger.debug("Data structuring completed.")
-    return data
+        Parameters:
+            dividends_dict (dict): Dictionary of ticker dividends dataframes.
+        """
+        for ticker, dividends in dividends_dict.items():
+            if dividends.empty:
+                continue
+            for _, dividend in dividends.iterrows():
+                ex_date = pd.to_datetime(dividend['ex_dividend_date'])
+                dividend_amount = dividend['cash_amount']
 
-def save_processed_data(data, output_path):
-    """
-    Save the processed data to a Feather file.
-    """
-    # Reset index to save 'date' and 'ticker' as columns
-    data_to_save = data.reset_index()
-    data_to_save.to_feather(output_path)
-    logger.info(f"Processed data saved to {output_path}.")
+                # Adjust prices before the ex-dividend date
+                mask = (self.data['ticker'] == ticker) & (self.data['date'] < ex_date)
+                self.data.loc[mask, ['open', 'high', 'low', 'close']] -= dividend_amount
 
-def process_data(base_dir, output_path=None):
-    # Load and combine data
-    combined_data = load_and_combine_data(base_dir)
-    
-    if not combined_data.empty:
-        logger.info("Data loaded and combined successfully.")
-        
-        # Clean data
-        cleaned_data = clean_data(combined_data)
-        if not cleaned_data.empty:
-            logger.info("Data cleaned successfully.")
-    
-            # Adjust for corporate actions (if applicable)
-            adjusted_data = adjust_for_corporate_actions(cleaned_data)
-            logger.info("Data adjusted for corporate actions.")
+                logger.info(f"Applied dividend adjustment for {ticker}: {dividend_amount} on {ex_date}.")
 
-            # Feature engineering
-            featured_data = feature_engineering(adjusted_data)
-            logger.info("Feature engineering completed.")
+    def adjust_for_all_corporate_actions(self, batch_size=500, max_concurrent_requests=30):
+        if self.data.empty:
+            logger.warning("No data for corporate actions.")
+            return
+        tickers = np.sort(self.data['ticker'].unique())
+        logger.info(f"Adjusting for {len(tickers)} tickers in batches of {batch_size}...")
+        for start in range(0, len(tickers), batch_size):
 
-            # Data structuring
-            structured_data = structure_data(featured_data)
-            logger.info("Data structuring completed.")
+            batch_tickers = tickers[start:start + batch_size]
 
-            # Save processed data
-            if output_path is not None:
-                save_processed_data(structured_data, output_path)
-                logger.info("Processed data saved successfully.")
-            
-            # Return the processed data
-            return structured_data
-        else:
-            logger.error("Data cleaning resulted in an empty DataFrame.")
-            return None
-    else:
-        logger.error("Data loading resulted in an empty DataFrame.")
-        return None
+            # Gather results by awaiting the coroutines
+            async def gather_tasks():
+                return await asyncio.gather(
+                    self.fetch_splits(batch_tickers, max_concurrent_requests),
+                    self.fetch_name_changes(batch_tickers, max_concurrent_requests),
+                    self.fetch_dividends(batch_tickers, max_concurrent_requests),
+                )
 
-def adjust_for_corporate_actions(data):
-    """
-    Adjust data for corporate actions like stock splits and dividends.
-    """
-    # Placeholder for adjustment logic
-    #  Need to fetch corporate actions data and adjust 'open', 'high', 'low', 'close', 'volume' accordingly.
-    logger.debug("Adjusting data for corporate actions is not implemented yet.")
-    return data
+            splits, name_changes, dividends = asyncio.run(gather_tasks())
+
+            # Apply adjustments
+            self.apply_splits(splits)
+            self.apply_name_changes(name_changes)
+            self.apply_dividends(dividends)
+
+            # Move logging here, inside the loop
+            logger.info(f"Completed batch {start + 1} to {start + len(batch_tickers)}.")
+
+        logger.info("Corporate actions adjustment complete.")
+
+    def save_processed_data(self):
+        if self.output_path:
+            self.data.reset_index(drop=True).to_feather(self.output_path)
+            logger.info(f"Data saved to {self.output_path}")
+
+    def process(self):
+        self.load_and_combine_data()
+        if self.data.empty:
+            logger.error("No data to process.")
+            return
+        self.clean_data()
+        self.adjust_for_all_corporate_actions()
+        self.feature_engineering()
+        self.save_processed_data()

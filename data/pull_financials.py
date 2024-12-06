@@ -3,6 +3,7 @@ import aiohttp
 import pandas as pd
 import logging
 from pathlib import Path
+from time import time
 from config.settings import DATA_DIR, POLYGON_API_KEY
 from data.data_processor import load_and_combine_data  # Assuming tickers are derived from processed data
 
@@ -151,16 +152,16 @@ def save_financials_data(financials):
     logger.info("Processing financials into a DataFrame...")
     financials_df = pd.DataFrame(financials)
     
+    # Normalize tickers column for clarity
+    financials_df['Ticker'] = financials_df['tickers'].apply(lambda x: x[0] if isinstance(x, list) and len(x) > 0 else None)
+    financials_df.drop(columns=['tickers'], inplace=True)
+    
     # Save to Feather
     financials_df.to_feather(FINANCIALS_FILE)
     logger.info(f"Financials data saved to {FINANCIALS_FILE}")
-    
-    # # Save to CSV for inspection
-    # csv_file = FINANCIALS_FILE.with_suffix(".csv")  # Change file extension to .csv
-    # financials_df.to_csv(csv_file, index=False)
-    # logger.info(f"Financials data also saved to {csv_file}")
 
 def main():
+    start_time = time()
     tickers = load_tickers_from_data()
     
     if tickers is None or len(tickers) == 0:
@@ -179,7 +180,8 @@ def main():
     else:
         logger.warning("No financials data fetched.")
     
-    logger.info("Financials fetching process completed.")
+    elapsed_time = time() - start_time
+    logger.info(f"Financials fetching process completed in {elapsed_time:.2f} seconds.")
 
 if __name__ == "__main__":
     main()

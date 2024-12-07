@@ -1,4 +1,6 @@
-# ![BackBoard Logo](image/logo.png)
+<p align="center">
+  <img src="image/logo.png" alt="BackBoard Logo">
+</p>
 
 ## BackBoard
 

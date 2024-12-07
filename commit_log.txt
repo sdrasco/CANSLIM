@@ -1,0 +1,26 @@
+2024-12-07 new logo
+2024-12-07 new logo
+2024-12-07 reorganized and renamed
+2024-12-06 splits, dividends, name changes now accounted for
+2024-12-03 Pulled historic financials. Basic calculations for all of CANSLIM now in place.
+2024-12-03 Basic calculations of NSLIM are in place.
+2024-12-03 SLM of CANSLIM now computed in data_processor, with an adaptable market tracker
+2024-12-02 slightly better test of data processor
+2024-12-02 Add data_processor module, initial test, and update .gitignore
+2024-11-30 Refactor logging setup: Centralized configuration and consistent logger initialization across all modules
+2024-11-29 added validation to data conversion
+2024-11-29 feather format for local data
+2024-11-29 data fetching now just fills most recent to present
+2024-11-28 update readme
+2024-11-28 update readme
+2024-11-28 data fetching optimzed to fill or update
+2024-11-28 README edit
+2024-11-28 README edit
+2024-11-28 first pull and test processing of all day aggs flat files 2003-present
+2024-11-28 getting S3 client going
+2024-11-28 getting S3 client going
+2024-11-28 getting S3 client going
+2024-11-28 Update README
+2024-11-28 Create .gitignore
+2024-11-28 Initial upload
+2024-11-28 Initial commit

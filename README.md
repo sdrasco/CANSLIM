@@ -4,14 +4,19 @@
 
 ## BackBoard
 
-**BackBoard** is a tool for testing stock trading strategies because we’re curious if any of them work. We’re starting with William O’Neil’s CANSLIM strategy—don’t ask why—but we’ll move on to others soon enough. It’s like a blackboard for sketchy backtests not yet worthy of ink, and like a basketball backboard off which strategies will either bounce or sink.
+**BackBoard** For testing stock trading strategies because we’re curious if any of them work. We’re starting with William O’Neil’s CANSLIM strategy—but we’ll move on to others soon enough. It’s like a blackboard for sketchy backtests not yet worthy of ink, and like a basketball backboard off which strategies will either bounce or sink.
 
-## Project Progress
+This README is a log of progress for now. Proper documentation may happen eventually, though I wouldn’t hold my breath.
 
-- **Setup Complete**: Project structure ready, data fetching implemented for market aggregates and financials.
-- **Aggregates Data**: Processing the top 1000 tickers by average daily volume across historical data.
-- **Financials Data**: Streamlined fetching and integration of financial statements for the selected tickers.
-- **Next Steps**: Begin backtesting strategies, starting with O’Neil’s and adding more as we go.
+## Project Progress Highlights
+
+- **2024-12-07**: New logo.
+- **2024-12-07**: Project reorganized and renamed to BackBoard.
+- **2024-12-06**: Splits, dividends, and name changes now accounted for in data processing.
+- **2024-12-03**: Pulled historic financials and completed basic calculations for all of CANSLIM.
+- **2024-11-28**: Successfully pulled and processed all day aggregates from 2003 to present.
+- **2024-11-28**: Initial S3 client setup for fetching flat files.
+- **2024-11-28**: Initial commit and project setup.
 
 ## License
 

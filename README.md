@@ -4,9 +4,9 @@
 
 ## BackBoard
 
-**BackBoard** For testing stock trading strategies because we’re curious if any of them work.  It’s like a blackboard for sketchy backtests not yet worthy of ink, and like a basketball backboard off which strategies will either bounce or sink. 
+**BackBoard** For testing stock trading strategies because we’re doubtful any of them work. It’s like a blackboard for sketchy backtests not yet worthy of ink, and like a basketball backboard off which strategies will either bounce or sink, adding to the ever-growing tally of doubt. 
 
-We’re starting with William O’Neil’s CANSLIM strategy.  We’ll move on to others soon enough. This space is a log of progress for now. Proper documentation may happen eventually, though I wouldn’t hold my breath.
+We’re starting with William O’Neil’s CANSLIM strategy.  He seemed ripe for confirming our doubts.  We’ll move on to others soon enough. This space is a log of progress for now. Proper documentation may happen eventually, though I wouldn’t hold my breath.
 
 ## Project Progress Highlights
 

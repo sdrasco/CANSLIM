@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="image/logo.png" alt="BackBoard Logo">
+  <img src="images/logo.png" alt="BackBoard Logo">
 </p>
 
 ## BackBoard

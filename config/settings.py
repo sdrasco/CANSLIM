@@ -1,3 +1,5 @@
+# config.settings
+
 from config.configure_logging import configure_logging
 import logging
 import os
@@ -14,8 +16,8 @@ logger = logging.getLogger(__name__)
 DATA_DIR = Path(__file__).parent.parent / "data"
 
 # Date range for downloading data
-START_DATE = date(2003, 9, 1)  # Full starting date
 END_DATE = date.today() - timedelta(days=1)  # Set to yesterday
+START_DATE = date(2003, 9, 1)  # Full range for production/backtesting
 
 # Credentials for Polygon.io
 POLYGON_S3_KEY = os.getenv("POLYGONIO_ACCESS_KEY")  # Access Key
@@ -30,12 +32,9 @@ if not POLYGON_S3_KEY or not POLYGON_S3_SECRET:
 POLYGON_S3_ENDPOINT = "https://files.polygon.io"
 POLYGON_BUCKET = "flatfiles"
 
-#
 # Ticker for market index proxy
 # Uncomment the desired index-tracking ETF and ensure only one is uncommented
-#
-# S&P 500 ETFs
-INDEX_PROXY_TICKER = "SPY"  # SPDR S&P 500 ETF Trust (default)
+INDEX_PROXY_TICKER = "SPY"  # Default
 # INDEX_PROXY_TICKER = "IVV"  # iShares Core S&P 500 ETF
 
 # Nasdaq-100 ETFs

@@ -18,9 +18,10 @@ from config.settings import (
     START_DATE,
     END_DATE,
 )
+from utils.logging_utils import configure_logging 
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
+configure_logging()
 logger = logging.getLogger(__name__)
 
 class AggregatesFetcher:

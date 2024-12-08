@@ -1,3 +1,5 @@
+# utils/logging_utils.py
+
 import logging
 
 def configure_logging():
@@ -9,4 +11,4 @@ def configure_logging():
 
     # Suppress HTTPX log entries
     httpx_logger = logging.getLogger("httpx")
-    httpx_logger.setLevel(logging.WARNING) 
+    httpx_logger.setLevel(logging.WARNING)

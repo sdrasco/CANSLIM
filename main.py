@@ -4,10 +4,11 @@ import logging
 from data.aggs_fetcher import AggregatesFetcher
 from data.aggs_processor import AggregatesProcessor
 from data.financials_fetcher import FinancialsFetcher
-from config.settings import DATA_DIR
+from config.settings import DATA_DIR, NUM_TICKERS
+from utils.logging_utils import configure_logging  
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
+configure_logging()
 logger = logging.getLogger(__name__)
 
 def main():
@@ -22,17 +23,17 @@ def main():
         logger.info("Step 2: Processing aggregates data...")
         aggs_processor = AggregatesProcessor(
             base_dir=DATA_DIR / "us_stocks_sip/day_aggs_feather",
-            output_path=DATA_DIR / "us_stocks_sip/day_aggs_feather/processed_data.feather",
-            top_n_tickers=1000,  # Adjust this as needed
+            output_path=DATA_DIR / "processed_data.feather",
+            top_n_tickers=NUM_TICKERS,  
         )
         aggs_processor.process()
         logger.info("Step 2 completed: Aggregates data processed.")
 
         # Step 3: Fetch Financials Data
-        logger.info("Step 3: Fetching financials data...")
-        financials_fetcher = FinancialsFetcher()
-        financials_fetcher.run()
-        logger.info("Step 3 completed: Financials data fetched.")
+        # logger.info("Step 3: Fetching financials data...")
+        # financials_fetcher = FinancialsFetcher()
+        # financials_fetcher.run()
+        # logger.info("Step 3 completed: Financials data fetched.")
 
     except Exception as e:
         logger.error(f"An error occurred in the pipeline: {e}")

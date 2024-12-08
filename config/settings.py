@@ -1,15 +1,13 @@
 # config.settings
 
-from config.configure_logging import configure_logging
 import logging
 import os
 from datetime import date, timedelta
 from pathlib import Path
+from utils.logging_utils import configure_logging  # Updated import
 
 # Configure logging
 configure_logging()
-
-# Create a logger for this module
 logger = logging.getLogger(__name__)
 
 # Base directory for storing data
@@ -18,6 +16,9 @@ DATA_DIR = Path(__file__).parent.parent / "data"
 # Date range for downloading data
 END_DATE = date.today() - timedelta(days=1)  # Set to yesterday
 START_DATE = date(2003, 9, 1)  # Full range for production/backtesting
+
+# Number of tickers that we'll be allowed to buy from
+NUM_TICKERS = 1500
 
 # Credentials for Polygon.io
 POLYGON_S3_KEY = os.getenv("POLYGONIO_ACCESS_KEY")  # Access Key
@@ -32,28 +33,6 @@ if not POLYGON_S3_KEY or not POLYGON_S3_SECRET:
 POLYGON_S3_ENDPOINT = "https://files.polygon.io"
 POLYGON_BUCKET = "flatfiles"
 
-# Ticker for market index proxy
-# Uncomment the desired index-tracking ETF and ensure only one is uncommented
-INDEX_PROXY_TICKER = "SPY"  # Default
-# INDEX_PROXY_TICKER = "IVV"  # iShares Core S&P 500 ETF
-
-# Nasdaq-100 ETFs
-# INDEX_PROXY_TICKER = "QQQ"  # Invesco QQQ Trust
-
-# Dow Jones Industrial Average ETFs
-# INDEX_PROXY_TICKER = "DIA"  # SPDR Dow Jones Industrial Average ETF Trust
-
-# Total Market ETFs
-# INDEX_PROXY_TICKER = "VTI"  # Vanguard Total Stock Market ETF
-
-# Sector ETFs (example: technology-heavy sectors)
-# INDEX_PROXY_TICKER = "XLK"  # Technology Select Sector SPDR Fund
-# INDEX_PROXY_TICKER = "XLY"  # Consumer Discretionary Select Sector SPDR Fund
-
-# International Market ETFs
-# INDEX_PROXY_TICKER = "EFA"  # iShares MSCI EAFE ETF (Developed Markets ex-U.S.)
-# INDEX_PROXY_TICKER = "VEA"  # Vanguard FTSE Developed Markets ETF
-# INDEX_PROXY_TICKER = "EWJ"  # iShares MSCI Japan ETF
-
-# Emerging Market ETFs
-# INDEX_PROXY_TICKER = "EEM"  # iShares MSCI Emerging Markets ETF
+# Proxies for market and money market performance
+MARKET_PROXY = "SPY"  # ETF to use as the market proxy
+MONEY_MARKET_PROXY = "SHY"  # ETF to use as the money market proxy

@@ -7,7 +7,7 @@ from config.settings import POLYGON_API_KEY
 
 logger = logging.getLogger(__name__)
 
-async def fetch_splits_for_ticker(session: httpx.AsyncClient, ticker: str, limit=1000) -> pd.DataFrame:
+async def fetch_splits_for_ticker(session: httpx.AsyncClient, ticker: str, limit=50) -> pd.DataFrame:
     url = "https://api.polygon.io/v3/reference/splits"
     params = {
         "ticker": ticker,

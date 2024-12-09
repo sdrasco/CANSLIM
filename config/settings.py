@@ -18,8 +18,9 @@ START_DATE = date(2003, 9, 1)  # earliest date in flat files
 END_DATE = date(2024, 12, 6)
 # END_DATE = date.today() - timedelta(days=1)  # or yesterday if you want more
 
-# Number of tickers that we'll be allowed to buy from
-NUM_TICKERS = 500
+# Number of tickers that we'll be allowed to buy
+NUM_TICKERS = 800
+
 # Credentials for Polygon.io
 POLYGON_S3_KEY = os.getenv("POLYGONIO_ACCESS_KEY")  # Access Key
 POLYGON_S3_SECRET = os.getenv("POLYGONIO_SECRET_KEY")  # Secret Key
@@ -36,3 +37,7 @@ POLYGON_BUCKET = "flatfiles"
 # Proxies for market and money market performance
 MARKET_PROXY = "SPY"  # ETF to use as the market proxy
 MONEY_MARKET_PROXY = "SHY"  # ETF to use as the money market proxy
+
+# Backtesting parameters
+INITIAL_FUNDS = 100000  # starting capital
+REBALANCE_FREQUENCY = "quarterly"  # can be "monthly", "quarterly", "annual", or "daily"

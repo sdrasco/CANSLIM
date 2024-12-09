@@ -7,7 +7,7 @@ from config.settings import POLYGON_API_KEY
 
 logger = logging.getLogger(__name__)
 
-async def fetch_events_for_ticker(session: httpx.AsyncClient, ticker: str, limit=1000) -> pd.DataFrame:
+async def fetch_events_for_ticker(session: httpx.AsyncClient, ticker: str, limit=50) -> pd.DataFrame:
     # Ticker events endpoint might differ from splits/dividends
     # Adjust the URL and params as documented.
     url = f"https://api.polygon.io/vX/reference/tickers/{ticker}/events"

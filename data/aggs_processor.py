@@ -151,9 +151,8 @@ class AggregatesProcessor:
         for proxy in [MARKET_PROXY, MONEY_MARKET_PROXY]:
             if proxy in self.data["ticker"].unique() and proxy not in self.top_stocks:
                 self.top_stocks.append(proxy)
-                logger.info(f"Ensuring proxy '{proxy}' is included in top_stocks.")
 
-        # Now reduce self.data to just the top_stocks (including proxies)
+        # Now reduce self.data to just the top_stocks and proxies
         if self.top_stocks:
             self.data = self.data[self.data["ticker"].isin(self.top_stocks)].copy()
             logger.info(f"Reduced self.data to {len(self.data)} rows for top {len(self.top_stocks)} tickers (including proxies).")

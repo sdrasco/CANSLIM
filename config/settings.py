@@ -13,6 +13,9 @@ logger = logging.getLogger(__name__)
 # Base directory for storing data
 DATA_DIR = Path(__file__).parent.parent / "data"
 
+# Base directory for storing reports
+REPORT_DIR = Path(__file__).parent.parent / "html"
+
 # Date range for downloading data
 START_DATE = date(2003, 9, 1)  # earliest date in flat files
 END_DATE = date(2024, 12, 6)

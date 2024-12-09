@@ -4,7 +4,7 @@ import logging
 from data.aggs_fetcher import AggregatesFetcher
 from data.aggs_processor import AggregatesProcessor
 from data.financials_fetcher import FinancialsFetcher
-from config.settings import DATA_DIR, NUM_TICKERS, INITIAL_FUNDS, REBALANCE_FREQUENCY, MARKET_PROXY, MONEY_MARKET_PROXY
+from config.settings import DATA_DIR, NUM_TICKERS, INITIAL_FUNDS, REBALANCE_FREQUENCY, MARKET_PROXY, MONEY_MARKET_PROXY, REPORT_DIR
 from utils.logging_utils import configure_logging
 
 # New imports for the backtesting pipeline
@@ -85,11 +85,11 @@ def main():
         # Step 8: Generate Report
         logger.info("Step 8: Generating HTML report...")
         strategies_data = [
-            ("Market Only", market_history, market_metrics),
-            ("SHY-SPY", shy_spy_history, shy_spy_metrics),
-            ("CANSLI", canslim_history, canslim_metrics)
+            ("Market Only (SHY)", market_history, market_metrics),
+            ("Risk Managed Market (SHY-SPY)", shy_spy_history, shy_spy_metrics),
+            ("CANSLIM", canslim_history, canslim_metrics)
         ]
-        create_html_report(strategies_data, output_path=DATA_DIR / "backtest_report.html")
+        create_html_report(strategies_data, output_path=REPORT_DIR / "backtest_report.html")
 
         logger.info("All steps completed successfully.")
 

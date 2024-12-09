@@ -40,9 +40,9 @@ def run_backtest(strategy_func, market_proxy_df, top_stocks_df, rebalance_dates,
     # But we may have to extend end_date a bit to capture some final days after last rebalance
     # Let's find the max available date in market_proxy_df as the natural end
     max_available_date = market_proxy_df["date"].max()
-    if end_date > max_available_date:
+    if end_date > max_available_date.date():
         logger.warning("End date beyond available market data, truncating.")
-        end_date = max_available_date
+        end_date = max_available_date.date()
 
     # We'll iterate over all trading days between start_date and end_date
     # Identify all unique trading days from market_proxy_df in the range

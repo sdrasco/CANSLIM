@@ -8,12 +8,12 @@ from pathlib import Path
 from config.settings import DATA_DIR, START_DATE, END_DATE, POLYGON_API_KEY
 from utils.logging_utils import configure_logging
 import traceback
+import numpy as np
 
 # Configure logging
 configure_logging()
 logger = logging.getLogger(__name__)
 
-# Paths
 FINANCIALS_FILE = Path(DATA_DIR) / "financials.feather"
 TOP_STOCKS_FEATHER = Path(DATA_DIR) / "top_stocks.feather"
 TOP_STOCKS_TICKERS_CSV = Path(DATA_DIR) / "top_stocks_tickersymbols.csv"
@@ -23,9 +23,8 @@ MAX_CONCURRENT_REQUESTS = 100
 
 class FinancialsFetcher:
     """
-    Fetch financial data for tickers using Polygon.io's API.
-    Fetches quarterly financials by default.
-    Supports pagination to retrieve all available data within the date range.
+    Fetch financial data for tickers using Polygon.io's API (quarterly).
+    Extract fields: ticker, timeframe, fiscal_period, fiscal_year, end_date, diluted_eps.
     """
 
     def __init__(self):
@@ -34,8 +33,7 @@ class FinancialsFetcher:
 
     def _load_tickers(self):
         """
-        Load tickers from the top_stocks_tickersymbols.csv file produced by the aggregates processor.
-        Returns a list of ticker symbols.
+        Load tickers from top_stocks_tickersymbols.csv.
         """
         if not TOP_STOCKS_TICKERS_CSV.exists():
             logger.error(f"Top stocks ticker symbols file not found at {TOP_STOCKS_TICKERS_CSV}")
@@ -54,8 +52,9 @@ class FinancialsFetcher:
     async def _fetch_financials_for_ticker(self, session, ticker, timeframe="quarterly", limit=100):
         """
         Fetch financials for a single ticker asynchronously, handling pagination.
+        Extract required fields.
         """
-        async with self.semaphore:  # Limit concurrent requests
+        async with self.semaphore:
             url = "https://api.polygon.io/vX/reference/financials"
             params = {
                 "ticker": ticker,
@@ -80,22 +79,23 @@ class FinancialsFetcher:
                     if results:
                         all_results.extend(results)
                     else:
-                        # No results for this page - might mean we are done
+                        # No results means done
                         break
 
                     next_url = json_data.get("next_url")
                     if not next_url:
-                        # No more pages
                         break
 
                     page_count += 1
                     logger.debug(f"Fetched page {page_count} for ticker {ticker}, {len(results)} results.")
 
-                    # Update params from next_url
-                    next_params = dict(item.split("=") for item in next_url.split("?", 1)[1].split("&"))
-                    if "apiKey" not in next_params:
-                        next_params["apiKey"] = POLYGON_API_KEY
-                    params = next_params
+                    from urllib.parse import urlparse, parse_qs
+                    parsed = urlparse(next_url)
+                    next_params = parse_qs(parsed.query)
+                    flat_params = {k: v[0] for k, v in next_params.items()}
+                    if "apiKey" not in flat_params:
+                        flat_params["apiKey"] = POLYGON_API_KEY
+                    params = flat_params
 
                 except Exception as e:
                     logger.error(f"Error fetching financials for {ticker}: {e}")
@@ -107,19 +107,42 @@ class FinancialsFetcher:
                 logger.warning(f"No financial data returned for ticker {ticker}.")
                 return pd.DataFrame()
 
-            df = pd.DataFrame(all_results)
-            # Add a column 'ticker' representing the requested ticker
-            df["ticker"] = ticker
+            # Parse results to get the needed columns
+            records = []
+            for r in all_results:
+                r_tickers = r.get("tickers", [ticker])
+                timeframe = r.get("timeframe", None)
+                fiscal_period = r.get("fiscal_period", None)
+                fiscal_year = r.get("fiscal_year", None)
+                end_date = r.get("end_date", None)  # Keep as end_date
 
-            # If there's a 'tickers' column, remove it to avoid confusion
-            if "tickers" in df.columns:
-                df.drop(columns="tickers", inplace=True)
+                financials = r.get("financials", {})
+                income_statement = financials.get("income_statement", {})
+                eps_obj = income_statement.get("diluted_earnings_per_share", {})
+                diluted_eps = eps_obj.get("value", np.nan)
+                if diluted_eps is None:
+                    diluted_eps = np.nan
+
+                for tkr in r_tickers:
+                    if tkr in self.tickers:
+                        records.append({
+                            "ticker": tkr,
+                            "timeframe": timeframe,
+                            "fiscal_period": fiscal_period,
+                            "fiscal_year": fiscal_year,
+                            "end_date": end_date,
+                            "diluted_eps": diluted_eps
+                        })
+
+            df = pd.DataFrame(records)
+            if "end_date" in df.columns and not df.empty:
+                df["end_date"] = pd.to_datetime(df["end_date"], errors="coerce")
 
             return df
 
     async def _fetch_all_financials(self):
         """
-        Fetch financials for all tickers asynchronously, aggregating them into one DataFrame.
+        Fetch financials for all tickers asynchronously.
         """
         if not self.tickers:
             logger.error("No tickers available to fetch financials.")
@@ -174,36 +197,26 @@ class FinancialsFetcher:
             top_stocks_df = pd.read_feather(TOP_STOCKS_FEATHER)
             tickers_df = pd.read_csv(TOP_STOCKS_TICKERS_CSV)
 
-            # Identify tickers that have financial data
             financial_tickers = set(financials["ticker"].unique()) if not financials.empty else set()
 
-            # Filter top_stocks_df to only those tickers with financial data
             filtered_top_stocks_df = top_stocks_df[top_stocks_df["ticker"].isin(financial_tickers)].copy()
-
-            # Filter tickers_df similarly
             filtered_tickers_df = tickers_df[tickers_df["ticker"].isin(financial_tickers)].copy()
 
-            # Get counts of unique tickers before and after
             original_ticker_count = len(tickers_df["ticker"].unique())
             filtered_ticker_count = len(filtered_tickers_df["ticker"].unique())
 
-            # Save the filtered data back
             filtered_top_stocks_df.reset_index(drop=True).to_feather(TOP_STOCKS_FEATHER)
             filtered_tickers_df.to_csv(TOP_STOCKS_TICKERS_CSV, index=False)
 
             logger.info(
-                f"Pruned top stocks and tickers: Reduced tickers from {original_ticker_count} to {filtered_ticker_count} "
-                f"after checking financials data."
+                f"Pruned top stocks and tickers: Reduced tickers from {original_ticker_count} to {filtered_ticker_count} after checking financials data."
             )
 
         except Exception as e:
             logger.error(f"Error pruning top stocks after financials fetch: {e}")
             logger.debug(f"Traceback:\n{traceback.format_exc()}")
-            
+
     def run(self):
-        """
-        Execute the financials fetching workflow.
-        """
         if not self.tickers:
             logger.error("No tickers available to fetch financials.")
             return
@@ -211,11 +224,9 @@ class FinancialsFetcher:
         logger.info("Starting financials fetching workflow...")
         financials = asyncio.run(self._fetch_all_financials())
         self._save_financials(financials)
-
-        # After saving financials, prune top_stocks and ticker symbols
         self._prune_top_stocks(financials)
-
         logger.info("Financials fetching workflow completed.")
+
 
 if __name__ == "__main__":
     fetcher = FinancialsFetcher()

@@ -1,4 +1,4 @@
-# main.py
+# main
 
 import logging
 from data.aggs_fetcher import AggregatesFetcher
@@ -30,10 +30,10 @@ def main():
         logger.info("Step 2 completed: Aggregates data processed.")
 
         # Step 3: Fetch Financials Data
-        # logger.info("Step 3: Fetching financials data...")
-        # financials_fetcher = FinancialsFetcher()
-        # financials_fetcher.run()
-        # logger.info("Step 3 completed: Financials data fetched.")
+        logger.info("Step 3: Fetching financials data...")
+        financials_fetcher = FinancialsFetcher()
+        financials_fetcher.run()
+        logger.info("Step 3 completed: Financials data fetched.")
 
     except Exception as e:
         logger.error(f"An error occurred in the pipeline: {e}")

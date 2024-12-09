@@ -1,4 +1,4 @@
-# data.aggs_fetcher.py
+# data.aggs_fetcher
 
 import os
 import boto3

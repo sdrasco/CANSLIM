@@ -85,7 +85,7 @@ def main():
         # Step 8: Generate Report
         logger.info("Step 8: Generating HTML report...")
         strategies_data = [
-            ("Market Only (SHY)", market_history, market_metrics),
+            ("Market Only (SPY)", market_history, market_metrics),
             ("Risk Managed Market (SHY-SPY)", shy_spy_history, shy_spy_metrics),
             ("CANSLIM", canslim_history, canslim_metrics)
         ]

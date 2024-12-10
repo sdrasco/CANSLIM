@@ -18,11 +18,11 @@ def market_only_strategy(rebalance_date, portfolio_value, data_dict):
     return {MARKET_PROXY: 1.0}
 
 
-def shy_spy_strategy(rebalance_date, portfolio_value, data_dict):
+def risk_managed_market_strategy(rebalance_date, portfolio_value, data_dict):
     """
-    Strategy 2: SHY-SPY
-    Uses M from market_proxy_df. If M is True at rebalance_date, invest fully in SPY,
-    otherwise fully in SHY.
+    Strategy 2: Risk Managed Market
+    Uses M from market_proxy_df. If M is True at rebalance_date, invest fully in market proxy,
+    otherwise fully in money market proxy.
     """
     market_proxy_df = data_dict.get("market_proxy_df")
     if market_proxy_df is None:
@@ -30,7 +30,7 @@ def shy_spy_strategy(rebalance_date, portfolio_value, data_dict):
         return {MONEY_MARKET_PROXY: 1.0}
 
     # Debug logs
-    logger.debug(f"SHY-SPY Strategy called for rebalance_date: {rebalance_date}")
+    logger.debug(f"Risk Managed Market Strategy called for rebalance_date: {rebalance_date}")
     logger.debug(f"market_proxy_df shape: {market_proxy_df.shape}")
 
     if "date" not in market_proxy_df.columns:
@@ -62,7 +62,7 @@ def shy_spy_strategy(rebalance_date, portfolio_value, data_dict):
 
     if row.empty:
         logger.warning(f"No market data for rebalance_date {rebalance_date}, "
-                       f"search_date {search_date}, defaulting to SHY")
+                       f"search_date {search_date}, defaulting to {MONEY_MARKET_PROXY}")
         # Log a few nearby dates to see if we're off by a day
         close_matches = market_proxy_df.iloc[(market_proxy_df["date"] - search_date).abs().argsort()[:5]]
         logger.debug("Closest dates found in market_proxy_df to search_date:\n" + str(close_matches["date"]))
@@ -72,16 +72,16 @@ def shy_spy_strategy(rebalance_date, portfolio_value, data_dict):
     logger.debug(f"For rebalance_date {rebalance_date}, M value is {m_value}")
 
     if m_value:
-        # M is True, go full SPY
+        # M is True, go full Market
         return {MARKET_PROXY: 1.0}
     else:
-        # M is False, go full SHY
+        # M is False, go full Money Market
         return {MONEY_MARKET_PROXY: 1.0}
 
 def canslim_strategy(rebalance_date, portfolio_value, data_dict):
     """
     Strategy 3: CANSLI-based
-    - If M is False, invest fully in SHY.
+    - If M is False, invest fully in Money Market.
     - If M is True, find all stocks meeting CANSLI_all == True on rebalance_date,
       pick top 6 (or fewer if not enough), and invest equally among them.
       If none meet the criteria, invest in SHY.
@@ -96,12 +96,12 @@ def canslim_strategy(rebalance_date, portfolio_value, data_dict):
     # Check M value
     m_row = market_proxy_df.loc[market_proxy_df["date"] == rebalance_date]
     if m_row.empty:
-        logger.warning(f"No market data for {rebalance_date}, defaulting to SHY")
+        logger.warning(f"No market data for {rebalance_date}, defaulting to {MONEY_MARKET_PROXY}")
         return {MONEY_MARKET_PROXY: 1.0}
 
     m_value = m_row["M"].iloc[0]
     if not m_value:
-        # M is False -> full SHY
+        # M is False -> full Money Market
         return {MONEY_MARKET_PROXY: 1.0}
 
     # M is True, select CANSLI_all stocks
@@ -110,7 +110,7 @@ def canslim_strategy(rebalance_date, portfolio_value, data_dict):
     # We'll pick them by alphabetic order of ticker for simplicity.
     candidates = top_stocks_df[(top_stocks_df["date"] == rebalance_date) & (top_stocks_df["CANSLI_all"] == True)]
     if candidates.empty:
-        # No CANSLI_all stocks -> SHY
+        # No CANSLI_all stocks -> Money Market
         return {MONEY_MARKET_PROXY: 1.0}
 
     # Sort candidates by ticker (or another metric if desired)

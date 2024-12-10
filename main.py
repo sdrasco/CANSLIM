@@ -11,7 +11,7 @@ from utils.logging_utils import configure_logging
 from data.data_loaders import load_market_proxy, load_top_stocks, load_financials
 from data.canslim_calculator import calculate_canslim_indicators
 from utils.calendar_utils import get_quarter_end_dates, get_rebalance_dates
-from strategies.strategy_definitions import market_only_strategy, shy_spy_strategy, canslim_strategy
+from strategies.strategy_definitions import market_only_strategy, risk_managed_market_strategy, canslim_strategy
 from backtesting.backtester import run_backtest
 from utils.metrics import compute_performance_metrics
 from utils.reporting import create_html_report
@@ -75,20 +75,20 @@ def main():
         logger.info("Step 6: Running backtests...")
 
         market_history = run_backtest(market_only_strategy, market_proxy_df, top_stocks_df, rebalance_dates, initial_funds=INITIAL_FUNDS)
-        shy_spy_history = run_backtest(shy_spy_strategy, market_proxy_df, top_stocks_df, rebalance_dates, initial_funds=INITIAL_FUNDS)
+        risk_managed_market_history = run_backtest(risk_managed_market_strategy, market_proxy_df, top_stocks_df, rebalance_dates, initial_funds=INITIAL_FUNDS)
         canslim_history = run_backtest(canslim_strategy, market_proxy_df, top_stocks_df, rebalance_dates, initial_funds=INITIAL_FUNDS)
 
         # Step 7: Compute Metrics
         logger.info("Step 7: Computing metrics...")
         market_metrics = compute_performance_metrics(market_history)
-        shy_spy_metrics = compute_performance_metrics(shy_spy_history)
+        risk_managed_market_metrics = compute_performance_metrics(risk_managed_market_history)
         canslim_metrics = compute_performance_metrics(canslim_history)
 
         # Step 8: Generate Report
         logger.info("Step 8: Generating HTML report...")
         strategies_data = [
-            ("Market Only (SPY)", market_history, market_metrics),
-            ("Risk Managed Market (SHY-SPY)", shy_spy_history, shy_spy_metrics),
+            (f"Market Only ({MARKET_PROXY})", market_history, market_metrics),
+            (f"Risk Managed Market ({MONEY_MARKET_PROXY}-{MARKET_PROXY})", risk_managed_market_history, risk_managed_market_metrics),
             ("CANSLIM", canslim_history, canslim_metrics)
         ]
         create_html_report(strategies_data, output_path=REPORT_DIR / "backtest_report.html")

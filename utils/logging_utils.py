@@ -9,6 +9,8 @@ def configure_logging():
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     )
 
-    # Suppress HTTPX log entries
+    # Suppress HTTPX and httpcore log entries
     httpx_logger = logging.getLogger("httpx")
     httpx_logger.setLevel(logging.ERROR)
+    httpcore_logger = logging.getLogger("httpcore")
+    httpcore_logger.setLevel(logging.ERROR)

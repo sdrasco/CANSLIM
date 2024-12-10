@@ -30,16 +30,19 @@ def calculate_m(market_proxy_df: pd.DataFrame) -> pd.DataFrame:
 
 def compute_c_a_from_financials(financials_df: pd.DataFrame):
     """
-    Compute C and A indicators from financials:
+    Compute C and A indicators from the financials data:
     - C (quarterly EPS growth >= 25% yoy)
     - A (annual EPS growth >= 20% yoy)
-    
-    Returns a DataFrame with columns: ticker, report_date, C, A.
+
+    Uses 'end_date' as the reporting period end date column.
+
+    Returns a DataFrame with columns: ticker, end_date, C, A.
     """
-    required = {"ticker", "timeframe", "fiscal_year", "fiscal_period", "diluted_eps", "report_date"}
+    required = {"ticker", "timeframe", "fiscal_year", "fiscal_period", "diluted_eps", "end_date"}
     if not required.issubset(financials_df.columns):
-        logger.error(f"Financials data missing required columns: {required - set(financials_df.columns)}")
-        return pd.DataFrame(columns=["ticker", "report_date", "C", "A"])
+        missing = required - set(financials_df.columns)
+        logger.error(f"Financials data missing required columns: {missing}")
+        return pd.DataFrame(columns=["ticker", "end_date", "C", "A"])
 
     # Quarterly C
     quarterly = financials_df[financials_df["timeframe"] == "quarterly"].copy()
@@ -54,12 +57,13 @@ def compute_c_a_from_financials(financials_df: pd.DataFrame):
     annual["A"] = ((annual["diluted_eps"] - annual["prev_year_eps"]) / annual["prev_year_eps"].abs()) >= 0.20
 
     # Merge quarterly and annual results
-    q_ca = quarterly[["ticker", "report_date", "C"]].drop_duplicates(["ticker", "report_date"])
-    a_ca = annual[["ticker", "report_date", "A"]].drop_duplicates(["ticker", "report_date"])
+    q_ca = quarterly[["ticker", "end_date", "C"]].drop_duplicates(["ticker", "end_date"])
+    a_ca = annual[["ticker", "end_date", "A"]].drop_duplicates(["ticker", "end_date"])
 
-    ca_df = pd.merge(q_ca, a_ca, on=["ticker", "report_date"], how="outer")
-    ca_df["C"] = ca_df["C"].fillna(False)
-    ca_df["A"] = ca_df["A"].fillna(False)
+    ca_df = pd.merge(q_ca, a_ca, on=["ticker", "end_date"], how="outer")
+    # Explicitly cast after fillna to avoid FutureWarning
+    ca_df["C"] = ca_df["C"].fillna(False).astype(bool)
+    ca_df["A"] = ca_df["A"].fillna(False).astype(bool)
 
     return ca_df
 
@@ -81,11 +85,15 @@ def calculate_nsli(top_stocks_df: pd.DataFrame) -> pd.DataFrame:
     top_stocks_df = top_stocks_df.sort_values(["ticker", "date"])
 
     # N: 52-week high (252 trading days ~ 1 year)
-    top_stocks_df["52_week_high"] = top_stocks_df.groupby("ticker")["close"].transform(lambda x: x.rolling(252, min_periods=1).max())
+    top_stocks_df["52_week_high"] = top_stocks_df.groupby("ticker")["close"].transform(
+        lambda x: x.rolling(252, min_periods=1).max()
+    )
     top_stocks_df["N"] = top_stocks_df["close"] >= top_stocks_df["52_week_high"]
 
     # S: 50-day volume average
-    top_stocks_df["50_day_vol_avg"] = top_stocks_df.groupby("ticker")["volume"].transform(lambda x: x.rolling(50, min_periods=1).mean())
+    top_stocks_df["50_day_vol_avg"] = top_stocks_df.groupby("ticker")["volume"].transform(
+        lambda x: x.rolling(50, min_periods=1).mean()
+    )
     top_stocks_df["S"] = top_stocks_df["volume"] >= top_stocks_df["50_day_vol_avg"] * 1.5
 
     # L: relative_strength > 1.0 if available
@@ -96,24 +104,29 @@ def calculate_nsli(top_stocks_df: pd.DataFrame) -> pd.DataFrame:
         top_stocks_df["L"] = False
 
     # I: up day with volume spike
-    top_stocks_df["I"] = (top_stocks_df["close"] > top_stocks_df["open"]) & (top_stocks_df["volume"] > top_stocks_df["50_day_vol_avg"] * 1.5)
+    top_stocks_df["I"] = (top_stocks_df["close"] > top_stocks_df["open"]) & (
+        top_stocks_df["volume"] > top_stocks_df["50_day_vol_avg"] * 1.5
+    )
 
+    # No direct fillna necessary for these boolean columns since they're assigned True/False directly
     return top_stocks_df
 
 
 def merge_ca_into_top_stocks(top_stocks_df: pd.DataFrame, ca_df: pd.DataFrame) -> pd.DataFrame:
     """
-    Merge C and A values into top_stocks_df daily data using the last known financial report date.
+    Merge C and A values into top_stocks_df daily data using the last known financial end_date.
     """
-    required = {"ticker", "report_date", "C", "A"}
+    required = {"ticker", "end_date", "C", "A"}
     if not required.issubset(ca_df.columns):
-        logger.error(f"CA Data missing required columns: {required - set(ca_df.columns)}")
+        missing = required - set(ca_df.columns)
+        logger.error(f"CA Data missing required columns: {missing}")
+        # Assign C and A as False if missing
         top_stocks_df["C"] = False
         top_stocks_df["A"] = False
         return top_stocks_df
 
     top_stocks_df = top_stocks_df.sort_values(["ticker", "date"])
-    ca_df = ca_df.sort_values(["ticker", "report_date"])
+    ca_df = ca_df.sort_values(["ticker", "end_date"])
 
     result_parts = []
     for tkr, group in top_stocks_df.groupby("ticker", group_keys=False):
@@ -122,15 +135,17 @@ def merge_ca_into_top_stocks(top_stocks_df: pd.DataFrame, ca_df: pd.DataFrame) -
             group["C"] = False
             group["A"] = False
         else:
-            # merge_asof by date on report_date
+            # merge_asof by date on end_date
             group = pd.merge_asof(
                 group.sort_values("date"),
-                ca_sub.sort_values("report_date").drop(columns="ticker"),
-                left_on="date", right_on="report_date",
+                ca_sub.sort_values("end_date").drop(columns="ticker"),
+                left_on="date",
+                right_on="end_date",
                 direction="backward"
             )
-            group["C"] = group["C"].fillna(False)
-            group["A"] = group["A"].fillna(False)
+            # Explicitly cast after fillna to avoid future warnings
+            group["C"] = group["C"].fillna(False).astype(bool)
+            group["A"] = group["A"].fillna(False).astype(bool)
         result_parts.append(group)
 
     top_stocks_df = pd.concat(result_parts, ignore_index=True)
@@ -165,12 +180,10 @@ def calculate_canslim_indicators(market_proxy_df: pd.DataFrame,
     top_stocks_df = merge_ca_into_top_stocks(top_stocks_df, ca_df)
 
     logger.info("Calculating CANSLI_all column...")
-    # CANSLI_all is True if all C, A, N, S, L, I are True
     required_cansli_cols = ["C", "A", "N", "S", "L", "I"]
     missing_cansli = [col for col in required_cansli_cols if col not in top_stocks_df.columns]
     if missing_cansli:
         logger.error(f"Missing some CANSLI columns: {missing_cansli}")
-        # Just set CANSLI_all to False if we are missing something
         top_stocks_df["CANSLI_all"] = False
     else:
         top_stocks_df["CANSLI_all"] = (top_stocks_df["C"] &

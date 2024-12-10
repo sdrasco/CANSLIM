@@ -72,7 +72,7 @@ def calculate_nsli(top_stocks_df: pd.DataFrame) -> pd.DataFrame:
     Compute N, S, L, I indicators for top stocks data on a daily basis.
     - N: close at new 52-week high
     - S: volume today >= 1.5 * 50-day vol avg
-    - L: relative_strength > 1.0 (if relative_strength available)
+    - L: relative_strength > 1.0 (requires defining relative_strength)
     - I: up day with volume spike
     """
     required_cols = {"ticker", "date", "close", "open", "volume"}
@@ -96,8 +96,8 @@ def calculate_nsli(top_stocks_df: pd.DataFrame) -> pd.DataFrame:
     if "relative_strength" in top_stocks_df.columns:
         top_stocks_df["L"] = top_stocks_df["relative_strength"] > 1.0 # 1.0 suggested
     else:
-        logger.warning("relative_strength not found, setting L = False.")
-        top_stocks_df["L"] = False
+        logger.warning("relative_strength not found, setting L = True.")
+        top_stocks_df["L"] = True
 
     top_stocks_df["I"] = (top_stocks_df["close"] > top_stocks_df["open"]) & (
         top_stocks_df["volume"] > top_stocks_df["50_day_vol_avg"] * 1.5
@@ -191,15 +191,11 @@ def calculate_canslim_indicators(proxies_df: pd.DataFrame,
         top_stocks_df["CANSLI_all"] = False
     else:
         top_stocks_df["CANSLI_all"] = (top_stocks_df["C"] &
+                                       top_stocks_df["A"] &
                                        top_stocks_df["N"] &
                                        top_stocks_df["S"] &
+                                       top_stocks_df["L"] &
                                        top_stocks_df["I"])
-        # top_stocks_df["CANSLI_all"] = (top_stocks_df["C"] &
-        #                                top_stocks_df["A"] &
-        #                                top_stocks_df["N"] &
-        #                                top_stocks_df["S"] &
-        #                                top_stocks_df["L"] &
-        #                                top_stocks_df["I"])
 
     logger.info("CANSLIM indicators computed.")
     return proxies_df, top_stocks_df, financials_df

@@ -22,8 +22,9 @@ def adjust_for_corporate_actions(data: pd.DataFrame) -> pd.DataFrame:
     splits_data = fetch_splits_data(tickers)
     data = apply_splits_adjustments(data, splits_data)
 
-    dividends_data = fetch_dividends_data(tickers)
-    data = apply_dividends_adjustments(data, dividends_data)
+    if DIVIDEND_ADJUSTMENT:
+        dividends_data = fetch_dividends_data(tickers)
+        data = apply_dividends_adjustments(data, dividends_data)
 
     events_data = fetch_ticker_events(tickers)
     data = apply_ticker_events_adjustments(data, events_data)
@@ -55,10 +56,6 @@ def apply_splits_adjustments(data: pd.DataFrame, splits_data: pd.DataFrame) -> p
 def apply_dividends_adjustments(data: pd.DataFrame, dividends_data: pd.DataFrame) -> pd.DataFrame:
     if dividends_data.empty:
         logger.debug("No dividends data found, no adjustments applied.")
-        return data
-
-    if not DIVIDEND_ADJUSTMENT:
-        logger.debug("Dividend adjustment is disabled in config. Returning data unchanged.")
         return data
 
     # Convert ex_dividend_date to datetime and sort

@@ -106,18 +106,49 @@ def canslim_strategy(rebalance_date, portfolio_value, data_dict, is_first_rebala
         logger.debug(f"canslim_strategy returning allocation: {allocation}")
         return allocation
 
-    # M is True
-    candidates = top_stocks_df[(top_stocks_df["date"] == search_date) & (top_stocks_df["CANSLI_all"] == True)]
-    logger.debug(f"Found {len(candidates)} CANSLI candidates at {rebalance_date}.")
+    # M is already confirmed True above this code snippet
 
-    if candidates.empty:
-        logger.debug("No CANSLI stocks found, defaulting to MONEY_MARKET_PROXY.")
+    # Retrieve all top_stocks_df rows for the current rebalance_date
+    candidates = top_stocks_df[top_stocks_df["date"] == search_date]
+    logger.debug(f"Found {len(candidates)} total candidates at {rebalance_date} before filtering.")
+
+    # Define which CANSLI criteria to require.
+    # For example, if you want C, N, S, I but not A or L:
+    require_c = True
+    require_a = False
+    require_n = True
+    require_s = True
+    require_l = True
+    require_i = True
+
+    logger.debug(f"Filtering candidates with conditions: "
+                 f"C={require_c}, A={require_a}, N={require_n}, S={require_s}, L={require_l}, I={require_i}")
+
+    # Apply conditions. We only filter by a criterion if it's required.
+    filtered = candidates
+    if require_c:
+        filtered = filtered[filtered["C"]]
+    if require_a:
+        filtered = filtered[filtered["A"]]
+    if require_n:
+        filtered = filtered[filtered["N"]]
+    if require_s:
+        filtered = filtered[filtered["S"]]
+    if require_l:
+        filtered = filtered[filtered["L"]]
+    if require_i:
+        filtered = filtered[filtered["I"]]
+
+    logger.debug(f"After applying conditions, {len(filtered)} candidates remain.")
+
+    if filtered.empty:
+        logger.debug("No candidates remain after filtering, defaulting to MONEY_MARKET_PROXY.")
         allocation = {MONEY_MARKET_PROXY: 1.0}
         logger.debug(f"canslim_strategy returning allocation: {allocation}")
         return allocation
 
-    candidates = candidates.sort_values("ticker")
-    chosen = candidates["ticker"].head(6).tolist()
+    filtered = filtered.sort_values("ticker")
+    chosen = filtered["ticker"].head(6).tolist()
     logger.debug(f"Chosen stocks: {chosen}")
 
     weight = 1.0 / len(chosen)

@@ -48,7 +48,7 @@ def apply_splits_adjustments(data: pd.DataFrame, splits_data: pd.DataFrame) -> p
             if data[mask].empty:
                 continue
             data.loc[mask, ["open", "high", "low", "close"]] = data.loc[mask, ["open", "high", "low", "close"]] / ratio
-            data.loc[mask, "volume"] = data.loc[mask, "volume"] * ratio
+            data.loc[mask, "volume"] = (data.loc[mask, "volume"] * ratio).round().astype(int)
             logger.debug(f"Applied {row['split_from']}-for-{row['split_to']} split on {tkr} as of {exec_date.date()}")
     return data
 

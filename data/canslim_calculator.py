@@ -54,7 +54,7 @@ def compute_c_a_from_financials(financials_df: pd.DataFrame):
     annual = financials_df[financials_df["timeframe"] == "annual"].copy()
     annual.sort_values(["ticker", "fiscal_year"], inplace=True)
     annual["prev_year_eps"] = annual.groupby("ticker")["diluted_eps"].shift(1)
-    annual["A"] = ((annual["diluted_eps"] - annual["prev_year_eps"]) / annual["prev_year_eps"].abs()) >= 0.20
+    annual["A"] = ((annual["diluted_eps"] - annual["prev_year_eps"]) / annual["prev_year_eps"].abs()) >= 0.2 # 0.2 suggested
 
     q_ca = quarterly[["ticker", "end_date", "C"]].drop_duplicates(["ticker", "end_date"])
     a_ca = annual[["ticker", "end_date", "A"]].drop_duplicates(["ticker", "end_date"])
@@ -94,7 +94,7 @@ def calculate_nsli(top_stocks_df: pd.DataFrame) -> pd.DataFrame:
     top_stocks_df["S"] = top_stocks_df["volume"] >= top_stocks_df["50_day_vol_avg"] * 1.5
 
     if "relative_strength" in top_stocks_df.columns:
-        top_stocks_df["L"] = top_stocks_df["relative_strength"] > 1.0
+        top_stocks_df["L"] = top_stocks_df["relative_strength"] > 1.0 # 1.0 suggested
     else:
         logger.warning("relative_strength not found, setting L = False.")
         top_stocks_df["L"] = False
@@ -191,11 +191,15 @@ def calculate_canslim_indicators(proxies_df: pd.DataFrame,
         top_stocks_df["CANSLI_all"] = False
     else:
         top_stocks_df["CANSLI_all"] = (top_stocks_df["C"] &
-                                       top_stocks_df["A"] &
                                        top_stocks_df["N"] &
                                        top_stocks_df["S"] &
-                                       top_stocks_df["L"] &
                                        top_stocks_df["I"])
+        # top_stocks_df["CANSLI_all"] = (top_stocks_df["C"] &
+        #                                top_stocks_df["A"] &
+        #                                top_stocks_df["N"] &
+        #                                top_stocks_df["S"] &
+        #                                top_stocks_df["L"] &
+        #                                top_stocks_df["I"])
 
     logger.info("CANSLIM indicators computed.")
     return proxies_df, top_stocks_df, financials_df

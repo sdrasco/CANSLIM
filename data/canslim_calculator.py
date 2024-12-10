@@ -2,31 +2,33 @@
 
 import pandas as pd
 import logging
+import warnings
+from config.settings import MARKET_PROXY
 from utils.logging_utils import configure_logging
 
 # Configure logging
 configure_logging()
 logger = logging.getLogger(__name__)
 
-def calculate_m(market_proxy_df: pd.DataFrame) -> pd.DataFrame:
+def calculate_m(market_only_df: pd.DataFrame) -> pd.DataFrame:
     """
-    Compute the M indicator for the market proxy data on a daily basis.
-    We first compute 50-day and 200-day moving averages on the close price, 
+    Compute the M indicator for the market proxy (MARKET_PROXY) data on a daily basis.
+    We first compute 50-day and 200-day moving averages on the close price,
     then determine M based on close > 50_MA > 200_MA.
+
+    market_only_df should contain only the MARKET_PROXY ticker rows.
     """
-    if "close" not in market_proxy_df.columns:
+    if "close" not in market_only_df.columns:
         logger.error("Market proxy data missing 'close' column required for M computation.")
-        return market_proxy_df
+        return market_only_df
 
-    # Compute rolling means for M calculation
-    market_proxy_df = market_proxy_df.sort_values("date")  # Ensure sorted by date
-    market_proxy_df["50_MA"] = market_proxy_df["close"].rolling(50, min_periods=1).mean()
-    market_proxy_df["200_MA"] = market_proxy_df["close"].rolling(200, min_periods=1).mean()
+    market_only_df = market_only_df.sort_values("date")  # Ensure sorted by date
+    market_only_df["50_MA"] = market_only_df["close"].rolling(50, min_periods=1).mean()
+    market_only_df["200_MA"] = market_only_df["close"].rolling(200, min_periods=1).mean()
 
-    market_proxy_df["M"] = (market_proxy_df["close"] > market_proxy_df["50_MA"]) & \
-                           (market_proxy_df["50_MA"] > market_proxy_df["200_MA"])
-    return market_proxy_df
-
+    market_only_df["M"] = (market_only_df["close"] > market_only_df["50_MA"]) & \
+                          (market_only_df["50_MA"] > market_only_df["200_MA"])
+    return market_only_df
 
 def compute_c_a_from_financials(financials_df: pd.DataFrame):
     """
@@ -44,29 +46,26 @@ def compute_c_a_from_financials(financials_df: pd.DataFrame):
         logger.error(f"Financials data missing required columns: {missing}")
         return pd.DataFrame(columns=["ticker", "end_date", "C", "A"])
 
-    # Quarterly C
     quarterly = financials_df[financials_df["timeframe"] == "quarterly"].copy()
     quarterly.sort_values(["ticker", "fiscal_period", "fiscal_year"], inplace=True)
     quarterly["prev_year_eps"] = quarterly.groupby(["ticker", "fiscal_period"])["diluted_eps"].shift(1)
     quarterly["C"] = ((quarterly["diluted_eps"] - quarterly["prev_year_eps"]) / quarterly["prev_year_eps"].abs()) >= 0.25
 
-    # Annual A
     annual = financials_df[financials_df["timeframe"] == "annual"].copy()
     annual.sort_values(["ticker", "fiscal_year"], inplace=True)
     annual["prev_year_eps"] = annual.groupby("ticker")["diluted_eps"].shift(1)
     annual["A"] = ((annual["diluted_eps"] - annual["prev_year_eps"]) / annual["prev_year_eps"].abs()) >= 0.20
 
-    # Merge quarterly and annual results
     q_ca = quarterly[["ticker", "end_date", "C"]].drop_duplicates(["ticker", "end_date"])
     a_ca = annual[["ticker", "end_date", "A"]].drop_duplicates(["ticker", "end_date"])
 
     ca_df = pd.merge(q_ca, a_ca, on=["ticker", "end_date"], how="outer")
-    # Explicitly cast after fillna to avoid FutureWarning
-    ca_df["C"] = ca_df["C"].fillna(False).astype(bool)
-    ca_df["A"] = ca_df["A"].fillna(False).astype(bool)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=FutureWarning)
+        ca_df["C"] = ca_df["C"].fillna(False).astype(bool)
+        ca_df["A"] = ca_df["A"].fillna(False).astype(bool)
 
     return ca_df
-
 
 def calculate_nsli(top_stocks_df: pd.DataFrame) -> pd.DataFrame:
     """
@@ -84,33 +83,27 @@ def calculate_nsli(top_stocks_df: pd.DataFrame) -> pd.DataFrame:
 
     top_stocks_df = top_stocks_df.sort_values(["ticker", "date"])
 
-    # N: 52-week high (252 trading days ~ 1 year)
     top_stocks_df["52_week_high"] = top_stocks_df.groupby("ticker")["close"].transform(
         lambda x: x.rolling(252, min_periods=1).max()
     )
     top_stocks_df["N"] = top_stocks_df["close"] >= top_stocks_df["52_week_high"]
 
-    # S: 50-day volume average
     top_stocks_df["50_day_vol_avg"] = top_stocks_df.groupby("ticker")["volume"].transform(
         lambda x: x.rolling(50, min_periods=1).mean()
     )
     top_stocks_df["S"] = top_stocks_df["volume"] >= top_stocks_df["50_day_vol_avg"] * 1.5
 
-    # L: relative_strength > 1.0 if available
     if "relative_strength" in top_stocks_df.columns:
         top_stocks_df["L"] = top_stocks_df["relative_strength"] > 1.0
     else:
         logger.warning("relative_strength not found, setting L = False.")
         top_stocks_df["L"] = False
 
-    # I: up day with volume spike
     top_stocks_df["I"] = (top_stocks_df["close"] > top_stocks_df["open"]) & (
         top_stocks_df["volume"] > top_stocks_df["50_day_vol_avg"] * 1.5
     )
 
-    # No direct fillna necessary for these boolean columns since they're assigned True/False directly
     return top_stocks_df
-
 
 def merge_ca_into_top_stocks(top_stocks_df: pd.DataFrame, ca_df: pd.DataFrame) -> pd.DataFrame:
     """
@@ -120,7 +113,6 @@ def merge_ca_into_top_stocks(top_stocks_df: pd.DataFrame, ca_df: pd.DataFrame) -
     if not required.issubset(ca_df.columns):
         missing = required - set(ca_df.columns)
         logger.error(f"CA Data missing required columns: {missing}")
-        # Assign C and A as False if missing
         top_stocks_df["C"] = False
         top_stocks_df["A"] = False
         return top_stocks_df
@@ -135,7 +127,6 @@ def merge_ca_into_top_stocks(top_stocks_df: pd.DataFrame, ca_df: pd.DataFrame) -
             group["C"] = False
             group["A"] = False
         else:
-            # merge_asof by date on end_date
             group = pd.merge_asof(
                 group.sort_values("date"),
                 ca_sub.sort_values("end_date").drop(columns="ticker"),
@@ -143,32 +134,45 @@ def merge_ca_into_top_stocks(top_stocks_df: pd.DataFrame, ca_df: pd.DataFrame) -
                 right_on="end_date",
                 direction="backward"
             )
-            # Explicitly cast after fillna to avoid future warnings
-            group["C"] = group["C"].fillna(False).astype(bool)
-            group["A"] = group["A"].fillna(False).astype(bool)
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", category=FutureWarning)
+                group["C"] = group["C"].fillna(False).astype(bool)
+                group["A"] = group["A"].fillna(False).astype(bool)
         result_parts.append(group)
 
     top_stocks_df = pd.concat(result_parts, ignore_index=True)
     return top_stocks_df
 
-
-def calculate_canslim_indicators(market_proxy_df: pd.DataFrame,
+def calculate_canslim_indicators(proxies_df: pd.DataFrame,
                                  top_stocks_df: pd.DataFrame,
                                  financials_df: pd.DataFrame):
     """
     High-level function to compute indicators:
-    - M in market_proxy_df (computed from close, adding 50_MA, 200_MA)
+    - M in proxies_df (filtered for MARKET_PROXY)
     - N, S, L, I in top_stocks_df (computed directly)
-    - C, A derived from financials but merged as daily columns into top_stocks_df
+    - C, A derived from financials but merged into top_stocks_df
     - Finally, add a CANSLI_all column that is True if C, A, N, S, L, I are all True.
-    
+
     Returns:
-      market_proxy_df (with M),
+      proxies_df (with M on MARKET_PROXY rows),
       top_stocks_df (with C, A, N, S, L, I, CANSLI_all),
       financials_df (unchanged)
     """
+
     logger.info("Calculating M in market proxy data...")
-    market_proxy_df = calculate_m(market_proxy_df)
+    # Filter the MARKET_PROXY ticker from proxies_df
+    market_only = proxies_df[proxies_df["ticker"] == MARKET_PROXY].copy()
+    market_only = calculate_m(market_only)
+
+    # Merge the M and MA columns back into proxies_df
+    # Drop old M/MA columns from proxies_df if they exist, then merge
+    proxies_df = proxies_df.drop(columns=["50_MA", "200_MA", "M"], errors="ignore")
+    proxies_df = proxies_df.merge(market_only[["date","50_MA","200_MA","M"]],
+                                  on="date", how="left")
+
+    # For rows that are not MARKET_PROXY, M will be NaN. That's expected.
+    # They don't need M, but let's fill them with False for consistency.
+    proxies_df["M"] = proxies_df["M"].fillna(False).astype(bool)
 
     logger.info("Computing C and A from financial data...")
     ca_df = compute_c_a_from_financials(financials_df)
@@ -194,4 +198,4 @@ def calculate_canslim_indicators(market_proxy_df: pd.DataFrame,
                                        top_stocks_df["I"])
 
     logger.info("CANSLIM indicators computed.")
-    return market_proxy_df, top_stocks_df, financials_df
+    return proxies_df, top_stocks_df, financials_df

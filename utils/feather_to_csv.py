@@ -4,7 +4,7 @@ import pandas as pd
 from pathlib import Path
 
 # ===== EDIT THIS PATH AS NEEDED =====
-FEATHER_FILE_PATH = "../data/top_stocks.feather"
+FEATHER_FILE_PATH = "../data/money_market_proxy.feather"
 # ====================================
 
 def feather_to_csv(feather_path):

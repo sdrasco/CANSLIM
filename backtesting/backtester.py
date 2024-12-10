@@ -10,25 +10,41 @@ from utils.logging_utils import configure_logging
 configure_logging()
 logger = logging.getLogger(__name__)
 
-def run_backtest(strategy_func, market_proxy_df, top_stocks_df, rebalance_dates, initial_funds=INITIAL_FUNDS):
+def run_backtest(strategy_func, proxies_df, top_stocks_df, rebalance_dates, initial_funds=INITIAL_FUNDS):
+    """
+    Run a backtest for a given strategy.
+
+    Parameters:
+        strategy_func (callable): The strategy function that takes (rebalance_date, portfolio_value, data_dict, is_first_rebalance)
+                                  and returns an allocation dict {ticker: weight}.
+        proxies_df (pd.DataFrame): Combined DataFrame with both MARKET_PROXY and MONEY_MARKET_PROXY tickers.
+                                   Must have columns: date, ticker, close.
+        top_stocks_df (pd.DataFrame): Top stocks data with date, ticker, close, and CANSLI columns.
+        rebalance_dates (list of date): The dates on which to rebalance the portfolio.
+        initial_funds (float): The initial amount of money to start with.
+
+    Returns:
+        portfolio_history (pd.DataFrame): DataFrame with columns ['date', 'portfolio_value'] representing the daily value.
+    """
+
     data_dict = {
-        "market_proxy_df": market_proxy_df,
+        "proxies_df": proxies_df,
         "top_stocks_df": top_stocks_df
     }
 
-    market_proxy_df = market_proxy_df.sort_values("date")
+    proxies_df = proxies_df.sort_values(["date", "ticker"])
     top_stocks_df = top_stocks_df.sort_values(["date", "ticker"])
 
     start_date = rebalance_dates[0]
     end_date = rebalance_dates[-1]
 
-    max_available_date = market_proxy_df["date"].max()
+    max_available_date = proxies_df["date"].max()
     if end_date > max_available_date.date():
         logger.warning(f"End date {end_date} beyond available market data ({max_available_date.date()}), truncating.")
         end_date = max_available_date.date()
 
-    trading_days = market_proxy_df[(market_proxy_df["date"] >= pd.to_datetime(start_date)) &
-                                   (market_proxy_df["date"] <= pd.to_datetime(end_date))]["date"].unique()
+    trading_days = proxies_df[(proxies_df["date"] >= pd.to_datetime(start_date)) &
+                              (proxies_df["date"] <= pd.to_datetime(end_date))]["date"].unique()
 
     trading_days = pd.to_datetime(sorted(trading_days))
 
@@ -37,9 +53,12 @@ def run_backtest(strategy_func, market_proxy_df, top_stocks_df, rebalance_dates,
 
     def get_price(date, ticker):
         if ticker == MARKET_PROXY or ticker == MONEY_MARKET_PROXY:
-            row = market_proxy_df[market_proxy_df["date"] == date]
+            # Filter proxies_df by date and ticker
+            row = proxies_df[(proxies_df["date"] == date) & (proxies_df["ticker"] == ticker)]
         else:
+            # For regular stocks, filter top_stocks_df
             row = top_stocks_df[(top_stocks_df["date"] == date) & (top_stocks_df["ticker"] == ticker)]
+
         if row.empty:
             logger.debug(f"No price data for {ticker} on {date}, returning None.")
             return None

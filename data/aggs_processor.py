@@ -1,3 +1,5 @@
+# data/aggs_processor.py
+
 import pandas as pd
 import logging
 import asyncio
@@ -146,8 +148,7 @@ class AggregatesProcessor:
 
         self.top_stocks = asyncio.run(self.filter_top_n_to_common_stocks(ranked_tickers))
 
-        # Ensure proxies are retained if they exist in the data
-        # Check if proxies exist in the dataset
+        # Ensure proxies are retained if they exist in the dataset
         for proxy in [MARKET_PROXY, MONEY_MARKET_PROXY]:
             if proxy in self.data["ticker"].unique() and proxy not in self.top_stocks:
                 self.top_stocks.append(proxy)
@@ -169,75 +170,64 @@ class AggregatesProcessor:
             logger.error("Output path is not set. Cannot save processed data.")
             return
 
+        # Separate proxies and top_stocks
+        proxies_mask = self.data["ticker"].isin([MARKET_PROXY, MONEY_MARKET_PROXY])
+        proxies_df = self.data[proxies_mask].copy()
+        top_stocks_df = self.data[~proxies_mask].copy()
+
+        # Save top stocks
         top_stocks_path = self.output_path.parent / "top_stocks.feather"
-        market_proxy_path = self.output_path.parent / "market_proxy.feather"
-        money_market_proxy_path = self.output_path.parent / "money_market_proxy.feather"
+        top_stocks_df.reset_index(drop=True).to_feather(top_stocks_path)
+        logger.info(f"Top stocks saved to {top_stocks_path}")
 
-        try:
-            if hasattr(self, "top_stocks") and self.top_stocks:
-                # Exclude proxies from the top stocks file
-                proxies = {MARKET_PROXY, MONEY_MARKET_PROXY}
-                filtered_top_stocks = [t for t in self.top_stocks if t not in proxies]
+        # Save ticker symbols for top stocks
+        top_stocks_tickers = sorted(top_stocks_df["ticker"].unique().tolist())
+        tickers_csv_path = self.output_path.parent / "top_stocks_tickersymbols.csv"
+        pd.DataFrame({"ticker": top_stocks_tickers}).to_csv(tickers_csv_path, index=False)
+        logger.info(f"Top stock ticker symbols saved to {tickers_csv_path}")
 
-                # Save top stocks without the proxies
-                top_stocks_df = self.data[self.data["ticker"].isin(filtered_top_stocks)]
-                top_stocks_df.reset_index(drop=True).to_feather(top_stocks_path)
-                logger.info(f"Top stocks saved to {top_stocks_path}")
-
-                # Save the ticker symbols (excluding proxies)
-                top_stocks_tickers = sorted(filtered_top_stocks)
-                tickers_csv_path = self.output_path.parent / "top_stocks_tickersymbols.csv"
-                pd.DataFrame({"ticker": top_stocks_tickers}).to_csv(tickers_csv_path, index=False)
-                logger.info(f"Top stock ticker symbols saved to {tickers_csv_path}")
-            else:
-                logger.error("Top stocks list is missing or empty. Skipping save.")
-
-            # Save market proxy
-            market_proxy_df = self.data[self.data["ticker"] == MARKET_PROXY]
-            if not market_proxy_df.empty:
-                market_proxy_df.reset_index(drop=True).to_feather(market_proxy_path)
-                logger.info(f"Market proxy saved to {market_proxy_path}")
-            else:
-                logger.error(f"No data found for market proxy '{MARKET_PROXY}'.")
-
-            # Save money market proxy
-            money_market_proxy_df = self.data[self.data["ticker"] == MONEY_MARKET_PROXY]
-            if not money_market_proxy_df.empty:
-                money_market_proxy_df.reset_index(drop=True).to_feather(money_market_proxy_path)
-                logger.info(f"Money market proxy saved to {money_market_proxy_path}")
-            else:
-                logger.error(f"No data found for money market proxy '{MONEY_MARKET_PROXY}'.")
-
-        except Exception as e:
-            logger.error(f"Failed to save processed data: {e}")
+        # Save proxies
+        proxies_path = self.output_path.parent / "proxies.feather"
+        proxies_df.reset_index(drop=True).to_feather(proxies_path)
+        logger.info(f"Proxies (market and money market) saved to {proxies_path}")
 
     def process(self):
         top_stocks_path = self.output_path.parent / "top_stocks.feather"
-        market_proxy_path = self.output_path.parent / "market_proxy.feather"
-        money_market_proxy_path = self.output_path.parent / "money_market_proxy.feather"
+        proxies_path = self.output_path.parent / "proxies.feather"
 
-        if all(path.exists() for path in [top_stocks_path, market_proxy_path, money_market_proxy_path]):
+        # If processed data files exist, validate them
+        if top_stocks_path.exists() and proxies_path.exists():
             try:
                 top_stocks_data = pd.read_feather(top_stocks_path)
+                proxies_data = pd.read_feather(proxies_path)
                 unique_tickers = top_stocks_data["ticker"].nunique()
+
+                # Check if number of top stocks matches expected
+                # Remember we might have fewer if no full top_n_tickers were found
+                # but let's not raise errors here unnecessarily.
+                # Instead, just log a warning if less than top_n_tickers found.
                 if unique_tickers != self.top_n_tickers:
-                    logger.warning(f"Top stocks file has {unique_tickers} tickers; expected {self.top_n_tickers}. Reprocessing.")
-                    raise ValueError("Invalid top stocks file.")
-                market_proxy_data = pd.read_feather(market_proxy_path)
-                if MARKET_PROXY not in market_proxy_data["ticker"].unique():
-                    logger.warning(f"Missing market proxy '{MARKET_PROXY}'. Reprocessing.")
-                    raise ValueError("Invalid market proxy file.")
-                money_market_proxy_data = pd.read_feather(money_market_proxy_path)
-                if MONEY_MARKET_PROXY not in money_market_proxy_data["ticker"].unique():
-                    logger.warning(f"Missing money market proxy '{MONEY_MARKET_PROXY}'. Reprocessing.")
-                    raise ValueError("Invalid money market proxy file.")
+                    logger.warning(
+                        f"Top stocks file has {unique_tickers} tickers; expected {self.top_n_tickers}. "
+                        f"This may be due to availability. Reprocessing may be needed."
+                    )
+
+                # Check if proxies exist
+                proxies_tickers = proxies_data["ticker"].unique()
+                if MARKET_PROXY not in proxies_tickers:
+                    logger.warning(f"Missing market proxy '{MARKET_PROXY}' in proxies. Reprocessing.")
+                    raise ValueError("Invalid proxies file.")
+                if MONEY_MARKET_PROXY not in proxies_tickers:
+                    logger.warning(f"Missing money market proxy '{MONEY_MARKET_PROXY}' in proxies. Reprocessing.")
+                    raise ValueError("Invalid proxies file.")
 
                 logger.info(
-                    f"Processed data already valid. {unique_tickers} tickers in top stocks; proxies {MARKET_PROXY}, {MONEY_MARKET_PROXY} found. Skipping processing."
+                    f"Processed data already available. Found {unique_tickers} top stocks and "
+                    f"proxies {MARKET_PROXY}, {MONEY_MARKET_PROXY} found. Skipping processing."
                 )
                 return
             except Exception as e:
-                logger.warning(f"Validation failed. Reprocessing: {e}")
+                logger.warning(f"Validation of existing processed data failed. Reprocessing: {e}")
 
         logger.info("Starting aggregates processing pipeline.")
         self.load_and_combine_data()

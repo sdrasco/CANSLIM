@@ -9,19 +9,28 @@ from config.settings import DATA_DIR
 configure_logging()
 logger = logging.getLogger(__name__)
 
-def load_market_proxy():
+def load_proxies():
     """
-    Load the market proxy data (e.g., SPY) from feather file.
+    Load the proxies data (e.g., SPY and BIL) from a single feather file called proxies.feather.
+    This file should contain a 'ticker' column to differentiate the MARKET_PROXY and MONEY_MARKET_PROXY.
     Returns a pandas DataFrame with columns such as:
-    date, close, (and after calculations) M, 50_MA, 200_MA.
+    date, ticker, close, and any other relevant columns.
     """
-    market_proxy_path = DATA_DIR / "market_proxy.feather"
-    if not market_proxy_path.exists():
-        logger.error(f"Market proxy file not found: {market_proxy_path}")
+    proxies_path = DATA_DIR / "proxies.feather"
+    if not proxies_path.exists():
+        logger.error(f"Proxies file not found: {proxies_path}")
         return pd.DataFrame()
 
-    df = pd.read_feather(market_proxy_path)
-    logger.info(f"Loaded market proxy data from {market_proxy_path}, shape: {df.shape}")
+    df = pd.read_feather(proxies_path)
+    logger.info(f"Loaded proxies data from {proxies_path}, shape: {df.shape}")
+
+    # Ensure expected columns are present (e.g., 'date', 'ticker', 'close')
+    required_cols = {"date", "ticker", "close"}
+    missing = required_cols - set(df.columns)
+    if missing:
+        logger.error(f"Proxies data missing required columns: {missing}")
+        return pd.DataFrame()
+
     return df
 
 

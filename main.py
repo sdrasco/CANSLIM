@@ -7,8 +7,8 @@ from data.financials_fetcher import FinancialsFetcher
 from config.settings import DATA_DIR, NUM_TICKERS, INITIAL_FUNDS, REBALANCE_FREQUENCY, MARKET_PROXY, MONEY_MARKET_PROXY, REPORT_DIR
 from utils.logging_utils import configure_logging
 
-# New imports for the backtesting pipeline
-from data.data_loaders import load_market_proxy, load_top_stocks, load_financials
+# Updated import: load_proxies() instead of load_market_proxy()
+from data.data_loaders import load_proxies, load_top_stocks, load_financials
 from data.canslim_calculator import calculate_canslim_indicators
 from utils.calendar_utils import get_quarter_end_dates, get_rebalance_dates
 from strategies.strategy_definitions import market_only_strategy, risk_managed_market_strategy, canslim_strategy
@@ -44,26 +44,32 @@ def main():
         financials_fetcher.run()
         logger.info("Step 3 completed: Financials data fetched.")
 
-        # Step 4: Calculate CANSLIM Indicators (M in market_proxy, C/A in financials merged into top_stocks, N/S/L/I in top_stocks)
+        # Step 4: Calculate CANSLIM Indicators
         logger.info("Step 4: Calculating CANSLIM indicators...")
-        market_proxy_df = load_market_proxy()
+
+        # Load the combined proxies (both MARKET_PROXY and MONEY_MARKET_PROXY)
+        proxies_df = load_proxies()
         top_stocks_df = load_top_stocks()
         financials_df = load_financials()
 
-        # Compute CANSLIM indicators
-        market_proxy_df, top_stocks_df, financials_df = calculate_canslim_indicators(market_proxy_df, top_stocks_df, financials_df)
+        # Compute CANSLIM indicators:
+        # The calculate_canslim_indicators function may need to filter the MARKET_PROXY ticker internally
+        # or we can ensure it handles multiple tickers. Assuming it was adjusted as discussed:
+        proxies_df, top_stocks_df, financials_df = calculate_canslim_indicators(proxies_df, top_stocks_df, financials_df)
 
-        # Save updated data if desired, but it is not necessary
+        # Save updated data if needed
         top_stocks_df.to_feather(DATA_DIR / "top_stocks.feather")
-        market_proxy_df.to_feather(DATA_DIR / "market_proxy.feather")
+        proxies_df.to_feather(DATA_DIR / "proxies.feather")
 
         logger.info("CANSLIM indicators calculated.")
 
         # Step 5: Determine Rebalance Dates
-        # Use AAPL to get quarter_end_dates
+        # We need MARKET_PROXY data specifically for determining rebalance dates.
+        market_only_df = proxies_df[proxies_df["ticker"] == MARKET_PROXY].copy()
+
         logger.info("Step 5: Determining rebalance dates...")
         quarter_ends_df = get_quarter_end_dates(financials_df, "AAPL")
-        rebalance_dates = get_rebalance_dates(market_proxy_df, quarter_ends_df)
+        rebalance_dates = get_rebalance_dates(market_only_df, quarter_ends_df)
 
         if not rebalance_dates:
             logger.warning("No rebalance dates found. Exiting after CANSLIM calculation.")
@@ -74,9 +80,12 @@ def main():
         # Step 6: Run Backtests for each strategy
         logger.info("Step 6: Running backtests...")
 
-        market_history = run_backtest(market_only_strategy, market_proxy_df, top_stocks_df, rebalance_dates, initial_funds=INITIAL_FUNDS)
-        risk_managed_market_history = run_backtest(risk_managed_market_strategy, market_proxy_df, top_stocks_df, rebalance_dates, initial_funds=INITIAL_FUNDS)
-        canslim_history = run_backtest(canslim_strategy, market_proxy_df, top_stocks_df, rebalance_dates, initial_funds=INITIAL_FUNDS)
+        # Now run_backtest expects proxies_df (with multiple tickers) instead of market_proxy_df
+        # The strategies and backtester code should now filter by ticker as needed.
+        # top_stocks_df remains the same.
+        market_history = run_backtest(market_only_strategy, proxies_df, top_stocks_df, rebalance_dates, initial_funds=INITIAL_FUNDS)
+        risk_managed_market_history = run_backtest(risk_managed_market_strategy, proxies_df, top_stocks_df, rebalance_dates, initial_funds=INITIAL_FUNDS)
+        canslim_history = run_backtest(canslim_strategy, proxies_df, top_stocks_df, rebalance_dates, initial_funds=INITIAL_FUNDS)
 
         # Step 7: Compute Metrics
         logger.info("Step 7: Computing metrics...")

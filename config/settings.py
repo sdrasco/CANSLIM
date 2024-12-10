@@ -47,3 +47,4 @@ MONEY_MARKET_PROXY = "BIL"  # starts pre 2003, likely better proxy than SHY
 # Backtesting parameters
 INITIAL_FUNDS = 100000  # starting capital
 REBALANCE_FREQUENCY = "quarterly"  # can be "monthly", "quarterly", "annual", or "daily"
+DIVIDEND_ADJUSTMENT = False

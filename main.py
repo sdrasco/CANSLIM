@@ -16,6 +16,8 @@ from backtesting.backtester import run_backtest
 from utils.metrics import compute_performance_metrics
 from utils.reporting import create_html_report
 
+# Configure logging
+configure_logging()
 logger = logging.getLogger(__name__)
 
 def main():

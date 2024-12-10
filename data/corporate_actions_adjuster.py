@@ -4,8 +4,12 @@ import pandas as pd
 from data.splits_data_fetcher import fetch_splits_data
 from data.dividends_data_fetcher import fetch_dividends_data
 from data.ticker_events_data_fetcher import fetch_ticker_events
+from utils.logging_utils import configure_logging
 
+# Configure logging
+configure_logging()
 logger = logging.getLogger(__name__)
+
 
 def adjust_for_corporate_actions(data: pd.DataFrame) -> pd.DataFrame:
     """

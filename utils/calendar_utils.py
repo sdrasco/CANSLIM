@@ -3,7 +3,10 @@
 import logging
 from datetime import date
 import pandas as pd
+from utils.logging_utils import configure_logging
 
+# Configure logging
+configure_logging()
 logger = logging.getLogger(__name__)
 
 def get_quarter_end_dates(financials_df: pd.DataFrame, ticker: str) -> pd.DataFrame:

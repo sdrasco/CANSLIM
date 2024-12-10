@@ -53,7 +53,7 @@ class AggregatesProcessor:
             missing_ticker_count = self.data["ticker"].isna().sum()
             self.data = self.data[self.data["ticker"].notna()]
 
-            test_ticker_pattern = r"^Z.*ZZT$"
+            test_ticker_pattern = r"(^Z.*ZZT$|^[A-Z]+TEST\.G$)"
             before_test_ticker_exclusion = len(self.data)
             self.data = self.data[~self.data["ticker"].str.match(test_ticker_pattern, na=False)]
             test_ticker_excluded_count = before_test_ticker_exclusion - len(self.data)

@@ -2,8 +2,11 @@
 
 import logging
 import pandas as pd
+from utils.logging_utils import configure_logging
 from config.settings import DATA_DIR
 
+# Configure logging
+configure_logging()
 logger = logging.getLogger(__name__)
 
 def load_market_proxy():

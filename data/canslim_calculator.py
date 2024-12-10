@@ -2,9 +2,11 @@
 
 import pandas as pd
 import logging
+from utils.logging_utils import configure_logging
 
+# Configure logging
+configure_logging()
 logger = logging.getLogger(__name__)
-
 
 def calculate_m(market_proxy_df: pd.DataFrame) -> pd.DataFrame:
     """

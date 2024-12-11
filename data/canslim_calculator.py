@@ -18,8 +18,9 @@ def calculate_m(market_only_df: pd.DataFrame) -> pd.DataFrame:
     market_only_df = market_only_df.sort_values("date")
     market_only_df["50_MA"] = market_only_df["close"].rolling(50, min_periods=1).mean()
     market_only_df["200_MA"] = market_only_df["close"].rolling(200, min_periods=1).mean()
-    market_only_df["M"] = (market_only_df["close"] > market_only_df["50_MA"]) & \
-                          (market_only_df["50_MA"] > market_only_df["200_MA"])
+    market_only_df["M"] = (market_only_df["50_MA"] > market_only_df["200_MA"])
+    # market_only_df["M"] = (market_only_df["close"] > market_only_df["50_MA"]) & \
+    #                       (market_only_df["50_MA"] > market_only_df["200_MA"])
     return market_only_df
 
 def compute_c_a_from_financials(financials_df: pd.DataFrame):
@@ -51,7 +52,7 @@ def compute_c_a_from_financials(financials_df: pd.DataFrame):
     # Group by ticker and fiscal_period for prev_year_eps
     quarterly["prev_year_eps"] = quarterly.groupby(["ticker", "fiscal_period"])["diluted_eps"].shift(1)
     # Calculate C
-    quarterly["C"] = ((quarterly["diluted_eps"] - quarterly["prev_year_eps"]) / quarterly["prev_year_eps"].abs()) >= 0.25
+    quarterly["C"] = ((quarterly["diluted_eps"] - quarterly["prev_year_eps"]) / quarterly["prev_year_eps"].abs()) >= 0.1 # suggested 0.25
 
     # Check how many rows have C = True
     c_true_count = quarterly["C"].sum()
@@ -78,7 +79,7 @@ def compute_c_a_from_financials(financials_df: pd.DataFrame):
     invalid_ratios = annual["A_ratio"].isna().sum()
     logger.debug(f"A: {invalid_ratios} rows have NaN ratio (likely due to missing prev_year_eps or zero EPS).")
 
-    annual["A"] = annual["A_ratio"] >= 0.20
+    annual["A"] = annual["A_ratio"] >= 0.10 # suggested 0.2
     a_true_count = annual["A"].sum()
     logger.debug(f"A: Found {a_true_count} rows with annual EPS growth >= 20%")
 

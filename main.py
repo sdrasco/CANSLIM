@@ -1,6 +1,9 @@
-# main.py
-
 import logging
+import os
+import glob
+import json
+from pathlib import Path
+
 from data.aggs_fetcher import AggregatesFetcher
 from data.aggs_processor import AggregatesProcessor
 from data.financials_fetcher import FinancialsFetcher
@@ -22,6 +25,13 @@ logger = logging.getLogger(__name__)
 
 def main():
     try:
+        # Remove all .feather and .csv files in DATA_DIR
+        for file_path in glob.glob(str(DATA_DIR / "*.feather")):
+            os.remove(file_path)
+        for file_path in glob.glob(str(DATA_DIR / "*.csv")):
+            os.remove(file_path)
+        logger.info("All .feather and .csv files removed from data directory.")
+
         # Step 1: Fetch Aggregates Data
         logger.info("Step 1: Fetching aggregates data...")
         fetcher = AggregatesFetcher()
@@ -52,9 +62,6 @@ def main():
         top_stocks_df = load_top_stocks()
         financials_df = load_financials()
 
-        # Compute CANSLIM indicators:
-        # The calculate_canslim_indicators function may need to filter the MARKET_PROXY ticker internally
-        # or we can ensure it handles multiple tickers. Assuming it was adjusted as discussed:
         proxies_df, top_stocks_df, financials_df = calculate_canslim_indicators(proxies_df, top_stocks_df, financials_df)
 
         # Save updated data if needed
@@ -64,9 +71,7 @@ def main():
         logger.info("CANSLIM indicators calculated.")
 
         # Step 5: Determine Rebalance Dates
-        # We need MARKET_PROXY data specifically for determining rebalance dates.
         market_only_df = proxies_df[proxies_df["ticker"] == MARKET_PROXY].copy()
-
         logger.info("Step 5: Determining rebalance dates...")
         quarter_ends_df = get_quarter_end_dates(financials_df, "AAPL")
         rebalance_dates = get_rebalance_dates(market_only_df, quarter_ends_df)
@@ -77,12 +82,8 @@ def main():
 
         logger.info(f"Rebalancing {REBALANCE_FREQUENCY}, dates: {rebalance_dates[:5]}...")
 
-        # Step 6: Run Backtests for each strategy
+        # Step 6: Run Backtests
         logger.info("Step 6: Running backtests...")
-
-        # Now run_backtest expects proxies_df (with multiple tickers) instead of market_proxy_df
-        # The strategies and backtester code should now filter by ticker as needed.
-        # top_stocks_df remains the same.
         market_history = run_backtest(market_only_strategy, proxies_df, top_stocks_df, rebalance_dates, initial_funds=INITIAL_FUNDS)
         risk_managed_market_history = run_backtest(risk_managed_market_strategy, proxies_df, top_stocks_df, rebalance_dates, initial_funds=INITIAL_FUNDS)
         canslim_history = run_backtest(canslim_strategy, proxies_df, top_stocks_df, rebalance_dates, initial_funds=INITIAL_FUNDS)
@@ -93,6 +94,15 @@ def main():
         risk_managed_market_metrics = compute_performance_metrics(risk_managed_market_history)
         canslim_metrics = compute_performance_metrics(canslim_history)
 
+        # Load descriptions from JSON
+        desc_path = Path("strategies") / "descriptions.json"
+        if desc_path.exists():
+            with open(desc_path, "r", encoding="utf-8") as f:
+                strategy_descriptions = json.load(f)
+        else:
+            logger.warning(f"Descriptions file not found at {desc_path}. Using empty descriptions.")
+            strategy_descriptions = {}
+
         # Step 8: Generate Report
         logger.info("Step 8: Generating HTML report...")
         strategies_data = [
@@ -100,7 +110,8 @@ def main():
             (f"Risk Managed Market ({MONEY_MARKET_PROXY}-{MARKET_PROXY})", risk_managed_market_history, risk_managed_market_metrics),
             ("CANSLIM", canslim_history, canslim_metrics)
         ]
-        create_html_report(strategies_data, output_path=REPORT_DIR / "backtest_report.html")
+
+        create_html_report(strategies_data, descriptions=strategy_descriptions, output_path=REPORT_DIR / "backtest_report.html")
 
         logger.info("All steps completed successfully.")
 

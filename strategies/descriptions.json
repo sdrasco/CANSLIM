@@ -1,0 +1,11 @@
+{
+  "Market Only (SPY)": {
+    "description": "This strategy invests entirely in the SPY ETF, which tracks the S&P 500 index. It never rotates out of the market and serves as a baseline for comparison."
+  },
+  "Risk Managed Market (BIL-SPY)": {
+    "description": "This strategy uses a simple market condition indicator (M, borrowed from the CANSLIM strategy) to decide when to be invested in the market (SPY) or in a money market proxy (BIL) for capital preservation. When the market is in an uptrend, it stays fully invested in SPY; otherwise, it moves to BIL. Rebalancing is performed quarterly."
+  },
+  "CANSLIM": {
+    "description": "<p>The CANSLIM strategy selects stocks that meet certain growth, volume, and momentum criteria:</p>\n<ul>\n<li><strong>C (Current Earnings):</strong> Strong quarterly EPS growth (≥25%)</li>\n<li><strong>A (Annual Earnings):</strong> Robust annual EPS growth (≥20%)</li>\n<li><strong>N (New Highs):</strong> Stocks reaching new 52-week highs</li>\n<li><strong>S (Supply/Demand):</strong> Volume spikes indicating heightened investor interest</li>\n<li><strong>L (Leader):</strong> Stocks outperforming the broader market</li>\n<li><strong>I (Institutional Sponsorship):</strong> Evidence of 'up' days with volume surges</li>\n<li><strong>M (Market Trend):</strong> Invested in equities only when the overall market is in an uptrend</li>\n</ul>\n<p>If multiple stocks qualify under these conditions, the top 6 are chosen based on a scoring system that considers recent returns and other momentum factors, ensuring the final selection focuses on the most promising candidates. If no suitable stocks meet these criteria, the strategy defaults to a money market proxy. Rebalancing is performed quarterly.</p>"
+  }
+}

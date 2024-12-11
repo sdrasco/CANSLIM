@@ -24,7 +24,7 @@ END_DATE = date(2024, 12, 6)
 # END_DATE = date.today() - timedelta(days=1)  # or yesterday if you want more
 
 # Number of tickers that we'll be allowed to buy
-NUM_TICKERS = 15
+NUM_TICKERS = 500
 
 # Credentials for Polygon.io
 POLYGON_S3_KEY = os.getenv("POLYGONIO_ACCESS_KEY")  # Access Key

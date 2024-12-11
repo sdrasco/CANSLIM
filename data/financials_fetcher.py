@@ -9,6 +9,7 @@ from config.settings import DATA_DIR, START_DATE, END_DATE, POLYGON_API_KEY
 from utils.logging_utils import configure_logging
 import traceback
 import numpy as np
+from urllib.parse import urlparse, parse_qs
 
 # Configure logging
 configure_logging()
@@ -23,8 +24,9 @@ MAX_CONCURRENT_REQUESTS = 100
 
 class FinancialsFetcher:
     """
-    Fetch financial data for tickers using Polygon.io's API (quarterly).
+    Fetch financial data for tickers using Polygon.io's API for both quarterly and annual financials.
     Extract fields: ticker, timeframe, fiscal_period, fiscal_year, end_date, diluted_eps.
+    Combine and save the results.
     """
 
     def __init__(self):
@@ -89,29 +91,31 @@ class FinancialsFetcher:
                     page_count += 1
                     logger.debug(f"Fetched page {page_count} for ticker {ticker}, {len(results)} results.")
 
-                    from urllib.parse import urlparse, parse_qs
                     parsed = urlparse(next_url)
                     next_params = parse_qs(parsed.query)
                     flat_params = {k: v[0] for k, v in next_params.items()}
                     if "apiKey" not in flat_params:
                         flat_params["apiKey"] = POLYGON_API_KEY
+                    # Keep timeframe and other params if needed
+                    if "timeframe" not in flat_params:
+                        flat_params["timeframe"] = timeframe
                     params = flat_params
 
                 except Exception as e:
-                    logger.error(f"Error fetching financials for {ticker}: {e}")
+                    logger.error(f"Error fetching {timeframe} financials for {ticker}: {e}")
                     logger.debug(f"Params used: {params}")
                     logger.debug(f"Traceback:\n{traceback.format_exc()}")
                     break
 
             if not all_results:
-                logger.warning(f"No financial data returned for ticker {ticker}.")
+                logger.warning(f"No {timeframe} financial data returned for ticker {ticker}.")
                 return pd.DataFrame()
 
             # Parse results to get the needed columns
             records = []
             for r in all_results:
                 r_tickers = r.get("tickers", [ticker])
-                timeframe = r.get("timeframe", None)
+                tf = r.get("timeframe", None)
                 fiscal_period = r.get("fiscal_period", None)
                 fiscal_year = r.get("fiscal_year", None)
                 end_date = r.get("end_date", None)  # Keep as end_date
@@ -127,7 +131,7 @@ class FinancialsFetcher:
                     if tkr in self.tickers:
                         records.append({
                             "ticker": tkr,
-                            "timeframe": timeframe,
+                            "timeframe": tf,
                             "fiscal_period": fiscal_period,
                             "fiscal_year": fiscal_year,
                             "end_date": end_date,
@@ -142,30 +146,43 @@ class FinancialsFetcher:
 
     async def _fetch_all_financials(self):
         """
-        Fetch financials for all tickers asynchronously.
+        Fetch both quarterly and annual financials for all tickers asynchronously.
         """
         if not self.tickers:
             logger.error("No tickers available to fetch financials.")
             return pd.DataFrame()
 
-        async with httpx.AsyncClient() as session:
-            tasks = [self._fetch_financials_for_ticker(session, t, "quarterly") for t in self.tickers]
-            results = await asyncio.gather(*tasks, return_exceptions=True)
+        async with httpx.AsyncClient(timeout=30.0) as session:
+            # Quarterly tasks
+            quarterly_tasks = [self._fetch_financials_for_ticker(session, t, "quarterly") for t in self.tickers]
+            # Annual tasks
+            annual_tasks = [self._fetch_financials_for_ticker(session, t, "annual") for t in self.tickers]
 
-        successful_results = []
-        for i, res in enumerate(results):
+            quarterly_results = await asyncio.gather(*quarterly_tasks, return_exceptions=True)
+            annual_results = await asyncio.gather(*annual_tasks, return_exceptions=True)
+
+        q_dfs = []
+        for i, res in enumerate(quarterly_results):
             if isinstance(res, Exception):
-                logger.error(f"Task {i} encountered an exception: {res}")
+                logger.error(f"Quarterly task {i} encountered an exception: {res}")
                 logger.debug(f"Traceback:\n{traceback.format_exc()}")
             elif isinstance(res, pd.DataFrame) and not res.empty:
-                successful_results.append(res)
+                q_dfs.append(res)
 
-        if not successful_results:
-            logger.error("No financial data was successfully fetched.")
+        a_dfs = []
+        for i, res in enumerate(annual_results):
+            if isinstance(res, Exception):
+                logger.error(f"Annual task {i} encountered an exception: {res}")
+                logger.debug(f"Traceback:\n{traceback.format_exc()}")
+            elif isinstance(res, pd.DataFrame) and not res.empty:
+                a_dfs.append(res)
+
+        if not q_dfs and not a_dfs:
+            logger.error("No financial data was successfully fetched (neither quarterly nor annual).")
             return pd.DataFrame()
 
-        combined_df = pd.concat(successful_results, ignore_index=True)
-        logger.info(f"Combined financials data has {len(combined_df)} records.")
+        combined_df = pd.concat(q_dfs + a_dfs, ignore_index=True)
+        logger.info(f"Combined financials data has {len(combined_df)} records (quarterly + annual).")
         return combined_df
 
     def _save_financials(self, financials: pd.DataFrame):
@@ -209,7 +226,8 @@ class FinancialsFetcher:
             filtered_tickers_df.to_csv(TOP_STOCKS_TICKERS_CSV, index=False)
 
             logger.info(
-                f"Pruned top stocks and tickers: Reduced tickers from {original_ticker_count} to {filtered_ticker_count} after checking financials data."
+                f"Pruned top_stocks and tickers: Reduced tickers from {original_ticker_count} to {filtered_ticker_count} "
+                f"after checking financials data."
             )
 
         except Exception as e:

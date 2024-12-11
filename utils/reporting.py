@@ -1,11 +1,12 @@
-# utils/reporting.py
-
 import logging
 import base64
 import io
 import matplotlib.pyplot as plt
 import pandas as pd
+from utils.logging_utils import configure_logging  # Updated import
 
+# Configure logging
+configure_logging()
 logger = logging.getLogger(__name__)
 
 def generate_equity_curve_chart(portfolio_history: pd.DataFrame, strategy_name: str):
@@ -18,10 +19,6 @@ def generate_equity_curve_chart(portfolio_history: pd.DataFrame, strategy_name: 
     ax.set_xlabel("Date", color="#264653")
     ax.set_ylabel("Portfolio Value", color="#264653")
     ax.grid(True, color="#e9ecef", linestyle="--", linewidth=0.5)
-
-    # Rounded corners: Trick is limited with matplotlib, but we can slightly round the axes patch
-    # For simplicity, just do normal. The user requested images have rounded corners - 
-    # we will embed the image in HTML with style="border-radius:10px"
 
     buf = io.BytesIO()
     plt.tight_layout()
@@ -36,17 +33,6 @@ def generate_metrics_table(metrics_dict: dict):
     """
     Generate an HTML table for the given metrics dictionary.
     """
-    # metrics_dict something like:
-    # {
-    #   "total_return": 0.35,
-    #   "annualized_return": 0.09,
-    #   "annualized_volatility":0.15,
-    #   "max_drawdown": -0.2,
-    #   "sharpe_ratio":0.53,
-    #   "sortino_ratio":0.7
-    # }
-
-    # Format each metric with a sensible number of decimal places
     def fmt(val):
         if isinstance(val, (int, float)):
             return f"{val:.4f}"
@@ -69,24 +55,26 @@ def generate_metrics_table(metrics_dict: dict):
     return table_html
 
 
-def create_html_report(strategies_data, output_path="report.html"):
+def create_html_report(strategies_data, descriptions=None, output_path="report.html"):
     """
     Create an HTML report.
     strategies_data: list of tuples (strategy_name, portfolio_history_df, metrics_dict)
+    descriptions: dict mapping strategy names to an object with a "description" field.
+                  For example:
+                  {
+                    "Market Only (SPY)": {
+                      "description": "This strategy invests entirely in SPY..."
+                    },
+                    "Risk Managed Market (BIL-SPY)": {
+                      "description": "This strategy invests in either BIL or SPY..."
+                    }
+                  }
 
-    Example:
-    strategies_data = [
-        ("Market Only", market_history, market_metrics),
-        ("SHY-SPY", shy_spy_history, shy_spy_metrics),
-        ("CANSLI", canslim_history, canslim_metrics)
-    ]
-
-    output_path: where to save the HTML file
+    If a description object is found, we extract the "description" field. If not, we show no description.
     """
-    # Inline CSS for a clean, modern look
-    # Muted colors: light gray background (#f8f9fa), white cards (#ffffff), teal accent (#2a9d8f),
-    # text in #264653 (dark teal), table lines in #e9ecef, 
-    # rounding images with border-radius in img style inline.
+
+    if descriptions is None:
+        descriptions = {}
 
     css = """
     <style>
@@ -139,6 +127,10 @@ def create_html_report(strategies_data, output_path="report.html"):
       width: 100%;
       max-width: 100%;
     }
+    .description {
+      margin-top: 10px;
+      color: #555;
+    }
     </style>
     """
 
@@ -151,8 +143,22 @@ def create_html_report(strategies_data, output_path="report.html"):
     for strategy_name, portfolio_history, metrics_dict in strategies_data:
         html_content += "<div class='strategy-section'>"
         html_content += f"<h2>{strategy_name}</h2>"
+
+        # Try to get the description object and extract the "description" field
+        desc_obj = descriptions.get(strategy_name, {})
+        if isinstance(desc_obj, dict):
+            # Extract description field if present
+            description_text = desc_obj.get("description", "")
+        else:
+            # If not a dict, assume a direct string or empty
+            description_text = str(desc_obj) if desc_obj else ""
+
+        if description_text:
+            html_content += f"<div class='description'>{description_text}</div>"
+
         # metrics table
         html_content += generate_metrics_table(metrics_dict)
+
         # chart
         img_base64 = generate_equity_curve_chart(portfolio_history, strategy_name)
         html_content += f"<img src='data:image/png;base64,{img_base64}' alt='Equity Curve' class='chart-image' />"

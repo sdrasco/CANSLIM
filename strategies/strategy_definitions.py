@@ -71,13 +71,6 @@ def risk_managed_market_strategy(rebalance_date, portfolio_value, data_dict, is_
 
 
 def canslim_strategy(rebalance_date, portfolio_value, data_dict, is_first_rebalance=False):
-    """
-    CANSLIM-based Strategy:
-    - If M is False, full MONEY_MARKET_PROXY.
-    - If M is True, select CANSLI_all stocks up to 6. If none, MONEY_MARKET_PROXY.
-
-    We also filter proxies_df by MARKET_PROXY to find M.
-    """
     logger.debug(f"canslim_strategy called for {rebalance_date} with portfolio_value={portfolio_value}, is_first_rebalance={is_first_rebalance}")
 
     proxies_df = data_dict.get("proxies_df")
@@ -106,16 +99,13 @@ def canslim_strategy(rebalance_date, portfolio_value, data_dict, is_first_rebala
         logger.debug(f"canslim_strategy returning allocation: {allocation}")
         return allocation
 
-    # M is already confirmed True above this code snippet
-
-    # Retrieve all top_stocks_df rows for the current rebalance_date
+    # M is True, proceed with CANSLI filtering
     candidates = top_stocks_df[top_stocks_df["date"] == search_date]
     logger.debug(f"Found {len(candidates)} total candidates at {rebalance_date} before filtering.")
 
-    # Define which CANSLI criteria to require.
-    # For example, if you want C, N, S, I but not A or L:
+    # Require all CANSLI criteria
     require_c = True
-    require_a = False
+    require_a = True
     require_n = True
     require_s = True
     require_l = True
@@ -124,7 +114,6 @@ def canslim_strategy(rebalance_date, portfolio_value, data_dict, is_first_rebala
     logger.debug(f"Filtering candidates with conditions: "
                  f"C={require_c}, A={require_a}, N={require_n}, S={require_s}, L={require_l}, I={require_i}")
 
-    # Apply conditions. We only filter by a criterion if it's required.
     filtered = candidates
     if require_c:
         filtered = filtered[filtered["C"]]
@@ -147,11 +136,17 @@ def canslim_strategy(rebalance_date, portfolio_value, data_dict, is_first_rebala
         logger.debug(f"canslim_strategy returning allocation: {allocation}")
         return allocation
 
-    filtered = filtered.sort_values("ticker")
+    # All passed conditions are True here, so just use a tie-breaker score:
+    # score = (close / 52_week_high) + (volume / 50_day_vol_avg)
+    filtered = filtered.copy()
+    filtered["score"] = (filtered["close"] / filtered["52_week_high"]) + (filtered["volume"] / filtered["50_day_vol_avg"])
+
+    filtered = filtered.sort_values("score", ascending=False)
     chosen = filtered["ticker"].head(6).tolist()
-    logger.debug(f"Chosen stocks: {chosen}")
+    logger.debug(f"Chosen stocks after scoring: {chosen}")
 
     weight = 1.0 / len(chosen)
     allocation = {tkr: weight for tkr in chosen}
     logger.debug(f"canslim_strategy returning allocation: {allocation}")
+    return allocation
     return allocation

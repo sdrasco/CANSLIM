@@ -10,6 +10,7 @@ We’re starting with William O’Neil’s CANSLIM strategy.  He seemed ripe for
 
 ## Project Progress Highlights
 
+- **2024-12-10**: Now have unique reports for each strategy. The L and A in CANSLIM need work.
 - **2024-12-09**: First full pipeline execution with backtesting and reporting; NaNs and flat lines in outputs, will debug further.
 - **2024-12-07**: Project reorganized and renamed to [BackBoard](https://backboard.uk/).
 - **2024-12-06**: Splits, dividends, and name changes now accounted for in data processing.

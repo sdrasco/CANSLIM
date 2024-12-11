@@ -11,21 +11,13 @@ configure_logging()
 logger = logging.getLogger(__name__)
 
 def calculate_m(market_only_df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Compute the M indicator for the market proxy (MARKET_PROXY) data on a daily basis.
-    We first compute 50-day and 200-day moving averages on the close price,
-    then determine M based on close > 50_MA > 200_MA.
-
-    market_only_df should contain only the MARKET_PROXY ticker rows.
-    """
     if "close" not in market_only_df.columns:
         logger.error("Market proxy data missing 'close' column required for M computation.")
         return market_only_df
 
-    market_only_df = market_only_df.sort_values("date")  # Ensure sorted by date
+    market_only_df = market_only_df.sort_values("date")
     market_only_df["50_MA"] = market_only_df["close"].rolling(50, min_periods=1).mean()
     market_only_df["200_MA"] = market_only_df["close"].rolling(200, min_periods=1).mean()
-
     market_only_df["M"] = (market_only_df["close"] > market_only_df["50_MA"]) & \
                           (market_only_df["50_MA"] > market_only_df["200_MA"])
     return market_only_df
@@ -46,15 +38,53 @@ def compute_c_a_from_financials(financials_df: pd.DataFrame):
         logger.error(f"Financials data missing required columns: {missing}")
         return pd.DataFrame(columns=["ticker", "end_date", "C", "A"])
 
+    logger.debug("Starting computation of C and A from financials.")
+
+    # Process Quarterly (C)
     quarterly = financials_df[financials_df["timeframe"] == "quarterly"].copy()
+    if quarterly.empty:
+        logger.debug("No quarterly data found.")
+    else:
+        logger.debug(f"Quarterly data shape: {quarterly.shape}")
     quarterly.sort_values(["ticker", "fiscal_period", "fiscal_year"], inplace=True)
+
+    # Group by ticker and fiscal_period for prev_year_eps
     quarterly["prev_year_eps"] = quarterly.groupby(["ticker", "fiscal_period"])["diluted_eps"].shift(1)
+    # Calculate C
     quarterly["C"] = ((quarterly["diluted_eps"] - quarterly["prev_year_eps"]) / quarterly["prev_year_eps"].abs()) >= 0.25
 
+    # Check how many rows have C = True
+    c_true_count = quarterly["C"].sum()
+    logger.debug(f"C: Found {c_true_count} rows with quarterly EPS growth >= 25%")
+
+    # Process Annual (A)
     annual = financials_df[financials_df["timeframe"] == "annual"].copy()
+    if annual.empty:
+        logger.debug("No annual data found.")
+    else:
+        logger.debug(f"Annual data shape: {annual.shape}")
     annual.sort_values(["ticker", "fiscal_year"], inplace=True)
+
+    # Group by ticker for prev_year_eps
     annual["prev_year_eps"] = annual.groupby("ticker")["diluted_eps"].shift(1)
-    annual["A"] = ((annual["diluted_eps"] - annual["prev_year_eps"]) / annual["prev_year_eps"].abs()) >= 0.2 # 0.2 suggested
+
+    # Let's debug what prev_year_eps looks like
+    no_prev_year = annual["prev_year_eps"].isna().sum()
+    logger.debug(f"A: Out of {len(annual)} annual rows, {no_prev_year} have no prev_year_eps (first year of data?).")
+
+    # Compute A as EPS growth >= 20%
+    annual["A_ratio"] = (annual["diluted_eps"] - annual["prev_year_eps"]) / annual["prev_year_eps"].abs()
+    # If prev_year_eps is zero or NaN, that could cause division by zero or NaN results. Check that:
+    invalid_ratios = annual["A_ratio"].isna().sum()
+    logger.debug(f"A: {invalid_ratios} rows have NaN ratio (likely due to missing prev_year_eps or zero EPS).")
+
+    annual["A"] = annual["A_ratio"] >= 0.20
+    a_true_count = annual["A"].sum()
+    logger.debug(f"A: Found {a_true_count} rows with annual EPS growth >= 20%")
+
+    # Sample debug: print a few rows where A is True
+    a_true_rows = annual[annual["A"]].head(5)
+    logger.debug(f"Sample rows with A=True:\n{a_true_rows[['ticker','fiscal_year','diluted_eps','prev_year_eps','A_ratio']].to_string(index=False)}")
 
     q_ca = quarterly[["ticker", "end_date", "C"]].drop_duplicates(["ticker", "end_date"])
     a_ca = annual[["ticker", "end_date", "A"]].drop_duplicates(["ticker", "end_date"])
@@ -65,40 +95,52 @@ def compute_c_a_from_financials(financials_df: pd.DataFrame):
         ca_df["C"] = ca_df["C"].fillna(False).astype(bool)
         ca_df["A"] = ca_df["A"].fillna(False).astype(bool)
 
+    # More debugging: How many rows end up in ca_df and how many are True?
+    ca_rows = len(ca_df)
+    ca_c_true = ca_df["C"].sum()
+    ca_a_true = ca_df["A"].sum()
+    logger.debug(f"Final CA DF: {ca_rows} rows, with C=True in {ca_c_true} rows and A=True in {ca_a_true} rows.")
+
     return ca_df
 
-def calculate_nsli(top_stocks_df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Compute N, S, L, I indicators for top stocks data on a daily basis.
-    - N: close at new 52-week high
-    - S: volume today >= 1.5 * 50-day vol avg
-    - L: relative_strength > 1.0 (requires defining relative_strength)
-    - I: up day with volume spike
-    """
+def calculate_nsli(top_stocks_df: pd.DataFrame, market_only: pd.DataFrame) -> pd.DataFrame:
     required_cols = {"ticker", "date", "close", "open", "volume"}
     if not required_cols.issubset(top_stocks_df.columns):
         missing = required_cols - set(top_stocks_df.columns)
         logger.error(f"Top stocks data missing required columns: {missing}")
         return top_stocks_df
 
+    # Sort both DataFrames by date
     top_stocks_df = top_stocks_df.sort_values(["ticker", "date"])
+    market_only = market_only.sort_values("date")
 
+    # Compute market daily returns
+    market_only["market_return"] = market_only["close"].pct_change().fillna(0)
+
+    # Compute each stock's daily returns
+    # group by ticker and compute pct_change in close
+    top_stocks_df["stock_return"] = top_stocks_df.groupby("ticker")["close"].pct_change().fillna(0)
+
+    # Merge market returns into top_stocks_df by date
+    top_stocks_df = top_stocks_df.merge(market_only[["date", "market_return"]], on="date", how="left")
+
+    # N: close at new 52-week high
     top_stocks_df["52_week_high"] = top_stocks_df.groupby("ticker")["close"].transform(
         lambda x: x.rolling(252, min_periods=1).max()
     )
     top_stocks_df["N"] = top_stocks_df["close"] >= top_stocks_df["52_week_high"]
 
+    # S: volume >= 1.5 * 50-day average
     top_stocks_df["50_day_vol_avg"] = top_stocks_df.groupby("ticker")["volume"].transform(
         lambda x: x.rolling(50, min_periods=1).mean()
     )
     top_stocks_df["S"] = top_stocks_df["volume"] >= top_stocks_df["50_day_vol_avg"] * 1.5
 
-    if "relative_strength" in top_stocks_df.columns:
-        top_stocks_df["L"] = top_stocks_df["relative_strength"] > 1.0 # 1.0 suggested
-    else:
-        logger.warning("relative_strength not found, setting L = True.")
-        top_stocks_df["L"] = True
+    # L: stock_return > market_return?
+    # If stock outperformed market today, L = True, else False
+    top_stocks_df["L"] = top_stocks_df["stock_return"] > top_stocks_df["market_return"]
 
+    # I: close > open and volume spike
     top_stocks_df["I"] = (top_stocks_df["close"] > top_stocks_df["open"]) & (
         top_stocks_df["volume"] > top_stocks_df["50_day_vol_avg"] * 1.5
     )
@@ -106,9 +148,6 @@ def calculate_nsli(top_stocks_df: pd.DataFrame) -> pd.DataFrame:
     return top_stocks_df
 
 def merge_ca_into_top_stocks(top_stocks_df: pd.DataFrame, ca_df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Merge C and A values into top_stocks_df daily data using the last known financial end_date.
-    """
     required = {"ticker", "end_date", "C", "A"}
     if not required.issubset(ca_df.columns):
         missing = required - set(ca_df.columns)
@@ -146,39 +185,20 @@ def merge_ca_into_top_stocks(top_stocks_df: pd.DataFrame, ca_df: pd.DataFrame) -
 def calculate_canslim_indicators(proxies_df: pd.DataFrame,
                                  top_stocks_df: pd.DataFrame,
                                  financials_df: pd.DataFrame):
-    """
-    High-level function to compute indicators:
-    - M in proxies_df (filtered for MARKET_PROXY)
-    - N, S, L, I in top_stocks_df (computed directly)
-    - C, A derived from financials but merged into top_stocks_df
-    - Finally, add a CANSLI_all column that is True if C, A, N, S, L, I are all True.
-
-    Returns:
-      proxies_df (with M on MARKET_PROXY rows),
-      top_stocks_df (with C, A, N, S, L, I, CANSLI_all),
-      financials_df (unchanged)
-    """
-
     logger.info("Calculating M in market proxy data...")
-    # Filter the MARKET_PROXY ticker from proxies_df
     market_only = proxies_df[proxies_df["ticker"] == MARKET_PROXY].copy()
     market_only = calculate_m(market_only)
 
-    # Merge the M and MA columns back into proxies_df
-    # Drop old M/MA columns from proxies_df if they exist, then merge
     proxies_df = proxies_df.drop(columns=["50_MA", "200_MA", "M"], errors="ignore")
     proxies_df = proxies_df.merge(market_only[["date","50_MA","200_MA","M"]],
                                   on="date", how="left")
-
-    # For rows that are not MARKET_PROXY, M will be NaN. That's expected.
-    # They don't need M, but let's fill them with False for consistency.
     proxies_df["M"] = proxies_df["M"].fillna(False).astype(bool)
 
     logger.info("Computing C and A from financial data...")
     ca_df = compute_c_a_from_financials(financials_df)
 
     logger.info("Calculating N, S, L, I in top stocks data...")
-    top_stocks_df = calculate_nsli(top_stocks_df)
+    top_stocks_df = calculate_nsli(top_stocks_df, market_only)
 
     logger.info("Merging C and A into top stocks data...")
     top_stocks_df = merge_ca_into_top_stocks(top_stocks_df, ca_df)

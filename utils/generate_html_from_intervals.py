@@ -141,6 +141,10 @@ html_template = f"""<!DOCTYPE html>
         margin-top: 10px;
         text-align: center;
     }}
+    .author-note a {{
+        color: #336699;
+        text-decoration: none;
+    }}
 
     .controls {{
         margin-top: 20px;
@@ -254,7 +258,7 @@ html_template = f"""<!DOCTYPE html>
 </div>
 
 <div class="author-note">
-    Made by Steve Drasco (steve.drasco@gmail.com)
+    Made by <a href="mailto:steve.drasco@gmail.com">Steve Drasco</a>
 </div>
 
 <div class="controls">

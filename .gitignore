@@ -21,6 +21,6 @@ Icon?
 *.log
 *.tmp
 
-# Ignore data files
-*.feather
-*.csv
+# Ignore specific data files and directories
+data/*.feather
+data/us_stocks_sip/

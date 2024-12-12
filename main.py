@@ -25,12 +25,17 @@ logger = logging.getLogger(__name__)
 
 def main():
     try:
-        # Remove all .feather and .csv files in DATA_DIR
-        for file_path in glob.glob(str(DATA_DIR / "*.feather")):
-            os.remove(file_path)
-        for file_path in glob.glob(str(DATA_DIR / "*.csv")):
-            os.remove(file_path)
-        logger.info("All .feather and .csv files removed from data directory.")
+        files_to_remove = [
+            "financials.feather", 
+            "proxies.feather", 
+            "top_stocks_tickersymbols.csv", 
+            "top_stocks.feather"
+        ]
+        for filename in files_to_remove:
+            file_path = DATA_DIR / filename
+            if file_path.exists():
+                os.remove(file_path)
+        logger.info(f"Removed old files: {files_to_remove}")
 
         # Step 1: Fetch Aggregates Data
         logger.info("Step 1: Fetching aggregates data...")

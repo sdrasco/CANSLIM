@@ -28,7 +28,6 @@ for row in rows:
     except ValueError:
         num_entries = 1
 
-    # Extract intervals (up to 3)
     intervals = []
     for i in [1, 2, 3]:
         entry_col = f"entry_{i}"
@@ -38,16 +37,13 @@ for row in rows:
         if entry_val:
             intervals.append((entry_val, exit_val if exit_val else None))
 
-    # Collect dates to find global range
     for (start, end) in intervals:
         all_dates.append(parse_date(start))
         if end:
             all_dates.append(parse_date(end))
 
-    # Store the raw info to compute later
     tickers_info.append((ticker, num_entries, intervals))
 
-# Compute global earliest and latest dates
 valid_dates = [d for d in all_dates if d is not None]
 if not valid_dates:
     print("No valid intervals in the file.")
@@ -57,7 +53,6 @@ earliest_date = min(valid_dates)
 latest_date = max(valid_dates)
 total_range_days = (latest_date - earliest_date).days + 1
 
-# Compute percentage of time in index for each ticker
 results = []
 for (ticker, num_entries, intervals) in tickers_info:
     days_in_index = 0
@@ -68,7 +63,6 @@ for (ticker, num_entries, intervals) in tickers_info:
         else:
             end_date = latest_date
 
-        # Clip to global range
         if start_date < earliest_date:
             start_date = earliest_date
         if end_date > latest_date:
@@ -78,7 +72,6 @@ for (ticker, num_entries, intervals) in tickers_info:
         days_in_index += interval_days
 
     percentage = days_in_index / total_range_days
-    # Store intervals in a structured form for tooltip
     structured_intervals = []
     for (s, e) in intervals:
         structured_intervals.append({"entry": s, "exit": e if e else ""})
@@ -90,12 +83,9 @@ for (ticker, num_entries, intervals) in tickers_info:
         "intervals": structured_intervals
     })
 
-# Sort by ticker initially
 results.sort(key=lambda x: x["ticker"])
 
 data_json = json.dumps(results)
-
-# Format earliest and latest date for display
 earliest_str = earliest_date.strftime("%Y-%m-%d")
 latest_str = latest_date.strftime("%Y-%m-%d")
 
@@ -108,17 +98,67 @@ html_template = f"""<!DOCTYPE html>
 <style>
     body {{
         margin: 20px;
-        font-family: sans-serif;
+        font-family: "Helvetica Neue", Arial, sans-serif;
+        background: #f2f2f2;
+        color: #333;
         position: relative;
+        text-align: center;
+    }}
+
+    .container {{
+        display: inline-block;
+        background: #fff;
+        border-radius: 8px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        padding: 20px;
+        max-width: 600px;
+        width: 100%;
+        margin-bottom: 20px;
+    }}
+
+    h1 {{
+        margin-bottom: 10px;
+        font-size: 24px;
+        font-weight: normal;
+        text-align: center;
+    }}
+
+    .legend {{
+        margin-bottom: 20px;
+        text-align: left;
+    }}
+
+    .legend p {{
+        margin: 5px 0;
+        font-size: 14px;
+        line-height: 1.4;
+    }}
+
+    .legend a {{
+        color: #336699;
+        text-decoration: none;
     }}
 
     .controls {{
         margin-bottom: 20px;
+        text-align: center;
     }}
+
     .controls button {{
-        margin-right: 10px;
-        padding: 5px 10px;
+        font-size: 14px;
+        padding: 6px 12px;
+        border: none;
+        background: #fff;
+        border-radius: 4px;
+        box-shadow: 0 0 3px rgba(0,0,0,0.15);
         cursor: pointer;
+        transition: background 0.3s, box-shadow 0.3s;
+        margin: 0 5px;
+    }}
+
+    .controls button:hover {{
+        background: #e9e9e9;
+        box-shadow: 0 0 6px rgba(0,0,0,0.2);
     }}
 
     .grid-container {{
@@ -126,31 +166,41 @@ html_template = f"""<!DOCTYPE html>
         grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
         grid-auto-rows: 60px;
         gap: 5px;
+        margin-top: 10px;
+    }}
+
+    @media (max-width: 600px) {{
+        .grid-container {{
+            grid-template-columns: repeat(auto-fill, minmax(40px, 1fr));
+            gap: 3px;
+        }}
     }}
 
     .ticker-box {{
         position: relative;
-        background-color: #98FB98; /* pale green */
+        background-color: #A7D7C5;
         border: 1px solid #ccc;
         text-align: center;
         cursor: pointer;
+        border-radius: 5px;
+        overflow: hidden; 
     }}
 
     .ticker-box span {{
-        /* Hidden by default, we now use tooltip instead */
-        display: none;
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        font-size: 12px;
+        font-weight: bold;
+        color: #000;
+        opacity: 0;
+        transition: opacity 0.2s;
+        pointer-events: none; 
     }}
 
-    h1 {{
-        margin-bottom: 10px;
-    }}
-
-    .legend {{
-        margin-bottom: 20px;
-    }}
-    .legend p {{
-        margin: 5px 0;
-        font-size: 14px;
+    .ticker-box:hover span {{
+        opacity: 1;
     }}
 
     #tooltip {{
@@ -161,8 +211,11 @@ html_template = f"""<!DOCTYPE html>
         padding: 5px;
         font-size: 12px;
         max-width: 200px;
-        pointer-events: none; /* so it doesn't interfere with hover */
+        pointer-events: none;
         box-shadow: 0 0 5px rgba(0,0,0,0.3);
+        border-radius: 3px;
+        color: #333;
+        z-index: 9999;
     }}
 
     #tooltip h2 {{
@@ -170,14 +223,18 @@ html_template = f"""<!DOCTYPE html>
         font-size: 14px;
         font-weight: bold;
     }}
+
     #tooltip p {{
         margin: 2px 0;
+        font-size: 13px;
     }}
+
     #tooltip ul {{
         padding-left: 15px;
         margin: 5px 0 0 0;
         list-style-type: square;
     }}
+
     #tooltip li {{
         font-size: 12px;
     }}
@@ -185,14 +242,17 @@ html_template = f"""<!DOCTYPE html>
 </head>
 <body>
 
+<div class="container">
 <h1>S&P 500 Ticker Tenure Visualization</h1>
 <div class="legend">
     <p>Data spans from {earliest_str} to {latest_str}.</p>
-    <p>Source: A historic data set found at this dubious source: <a href="https://github.com/hanshof/sp500_constituents" target="_blank">https://github.com/hanshof/sp500_constituents</a></p>
-    <p>Each box represents a ticker. Hover over a box to see details:</p>
+    <p>Source: Historical data from <a href="https://github.com/hanshof/sp500_constituents" target="_blank">this oh-so-trustworthy repository</a>. 
+    Assume nothing.</p>
+    <p>Rehashed data version available <a href="https://backboard.uk/sp500_data.csv" target="_blank">here</a>.</p>
+    <p>Each box represents a ticker. Hover over a box to see the ticker symbol right there, and the tooltip for more details:</p>
     <ul>
         <li>Ticker symbol</li>
-        <li>% of time in the index (over the entire {earliest_str} to {latest_str} period)</li>
+        <li>% of time in the index</li>
         <li>Entry & exit dates for its intervals</li>
     </ul>
 </div>
@@ -201,6 +261,7 @@ html_template = f"""<!DOCTYPE html>
     <button id="sort-alpha">Sort Alphabetically</button>
     <button id="sort-entries">Sort by Number of Entries</button>
     <button id="sort-percent">Sort by % of Time</button>
+</div>
 </div>
 
 <div class="grid-container" id="grid"></div>
@@ -219,11 +280,14 @@ function renderGrid() {{
         div.className = 'ticker-box';
         div.style.opacity = boxOpacity;
 
-        // Store data attributes for tooltip
         div.dataset.ticker = d.ticker;
         div.dataset.percentage = d.percentage;
         div.dataset.numEntries = d.num_entries;
         div.dataset.intervals = JSON.stringify(d.intervals);
+
+        var span = document.createElement('span');
+        span.textContent = d.ticker;
+        div.appendChild(span);
 
         container.appendChild(div);
     }});
@@ -251,7 +315,6 @@ document.addEventListener('mouseover', function(e) {{
         var t = e.target.dataset.ticker;
         var p = parseFloat(e.target.dataset.percentage);
         var intervals = JSON.parse(e.target.dataset.intervals);
-        // Format percentage as, say, XX.XX%
         var percStr = (p * 100).toFixed(2) + '%';
 
         var html = '<h2>' + t + '</h2>';
@@ -261,7 +324,7 @@ document.addEventListener('mouseover', function(e) {{
             intervals.forEach(function(iv) {{
                 var entry = iv.entry;
                 var exit = iv.exit || '(still in)';
-                html += '<li>' + entry + ' to ' + (exit || '') + '</li>';
+                html += '<li>' + entry + ' to ' + exit + '</li>';
             }});
             html += '</ul>';
         }}
@@ -279,7 +342,6 @@ document.addEventListener('mouseout', function(e) {{
 
 document.addEventListener('mousemove', function(e) {{
     if (tooltip.style.display === 'block') {{
-        // Position tooltip near the mouse cursor
         var xOffset = 15;
         var yOffset = 15;
         tooltip.style.left = (e.pageX + xOffset) + 'px';
@@ -287,7 +349,6 @@ document.addEventListener('mousemove', function(e) {{
     }}
 }});
 
-// Initial render
 renderGrid();
 </script>
 
@@ -298,4 +359,4 @@ renderGrid();
 with open(output_file, 'w', encoding='utf-8') as f:
     f.write(html_template)
 
-print("HTML visualization with sorting and tooltip generated:", output_file)
+print("HTML visualization with centered box and link to rehashed data generated:", output_file)

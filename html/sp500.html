@@ -44,6 +44,13 @@
         text-decoration: none;
     }
 
+    .author-note {
+        font-size: 12px;
+        color: #666;
+        margin-top: 10px;
+        text-align: center;
+    }
+
     .controls {
         margin-top: 20px;
         text-align: center;
@@ -150,9 +157,13 @@
 <h1>S&P 500 Tickers Over Time</h1>
 <div class="legend">
     <p>Data spans from 1996-01-02 to 2024-11-26.</p>
-    <p>Historical data (6MB) from <a href="https://github.com/hanshof/sp500_constituents" target="_blank">this repository</a>. 
+    <p>Historical data <a href="https://github.com/hanshof/sp500_constituents" target="_blank">(6MB) version from this shady anonymous repository</a>. 
     Assume nothing.</p>
-    <p>Rehashed data version (35kB) available <a href="https://backboard.uk/html/sp500_data.csv" target="_blank">here</a>.</p>
+    <p>My rehashed <a href="https://backboard.uk/data/sp_500_intervals.csv" target="_blank">(35kB) version available here</a>.</p>
+</div>
+
+<div class="author-note">
+    Made by Steve Drasco (steve.drasco@gmail.com)
 </div>
 
 <div class="controls">
@@ -173,7 +184,6 @@ function renderGrid() {
     var container = document.getElementById('grid');
     container.innerHTML = '';
     data.forEach(function(d) {
-        // Instead of adjusting opacity, we use RGBA background
         var boxOpacity = 0.2 + 0.8 * d.percentage;
         var div = document.createElement('div');
         div.className = 'ticker-box';

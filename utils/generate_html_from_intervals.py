@@ -94,7 +94,7 @@ html_template = f"""<!DOCTYPE html>
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>S&P 500 Ticker Tenure Visualization</title>
+<title>S&P 500 Tickers Over Time</title>
 <style>
     body {{
         margin: 20px;
@@ -107,13 +107,14 @@ html_template = f"""<!DOCTYPE html>
 
     .container {{
         display: inline-block;
-        background: #fff;
+        background: #ebeff2;
         border-radius: 8px;
         box-shadow: 0 2px 5px rgba(0,0,0,0.2);
         padding: 20px;
         max-width: 600px;
         width: 100%;
         margin-bottom: 20px;
+        text-align: left;
     }}
 
     h1 {{
@@ -121,11 +122,6 @@ html_template = f"""<!DOCTYPE html>
         font-size: 24px;
         font-weight: normal;
         text-align: center;
-    }}
-
-    .legend {{
-        margin-bottom: 20px;
-        text-align: left;
     }}
 
     .legend p {{
@@ -139,8 +135,15 @@ html_template = f"""<!DOCTYPE html>
         text-decoration: none;
     }}
 
+    .author-note {{
+        font-size: 12px;
+        color: #666;
+        margin-top: 10px;
+        text-align: center;
+    }}
+
     .controls {{
-        margin-bottom: 20px;
+        margin-top: 20px;
         text-align: center;
     }}
 
@@ -148,7 +151,7 @@ html_template = f"""<!DOCTYPE html>
         font-size: 14px;
         padding: 6px 12px;
         border: none;
-        background: #fff;
+        background: #b6e2d3;
         border-radius: 4px;
         box-shadow: 0 0 3px rgba(0,0,0,0.15);
         cursor: pointer;
@@ -157,7 +160,7 @@ html_template = f"""<!DOCTYPE html>
     }}
 
     .controls button:hover {{
-        background: #e9e9e9;
+        background: #a7d7c5;
         box-shadow: 0 0 6px rgba(0,0,0,0.2);
     }}
 
@@ -178,7 +181,6 @@ html_template = f"""<!DOCTYPE html>
 
     .ticker-box {{
         position: relative;
-        background-color: #A7D7C5;
         border: 1px solid #ccc;
         text-align: center;
         cursor: pointer;
@@ -243,18 +245,16 @@ html_template = f"""<!DOCTYPE html>
 <body>
 
 <div class="container">
-<h1>S&P 500 Ticker Tenure Visualization</h1>
+<h1>S&P 500 Tickers Over Time</h1>
 <div class="legend">
     <p>Data spans from {earliest_str} to {latest_str}.</p>
-    <p>Source: Historical data from <a href="https://github.com/hanshof/sp500_constituents" target="_blank">this oh-so-trustworthy repository</a>. 
+    <p>Historical data <a href="https://github.com/hanshof/sp500_constituents" target="_blank">(6MB) version from this shady anonymous repository</a>. 
     Assume nothing.</p>
-    <p>Rehashed data version available <a href="https://backboard.uk/sp500_data.csv" target="_blank">here</a>.</p>
-    <p>Each box represents a ticker. Hover over a box to see the ticker symbol right there, and the tooltip for more details:</p>
-    <ul>
-        <li>Ticker symbol</li>
-        <li>% of time in the index</li>
-        <li>Entry & exit dates for its intervals</li>
-    </ul>
+    <p>My rehashed <a href="https://backboard.uk/data/sp_500_intervals.csv" target="_blank">(35kB) version available here</a>.</p>
+</div>
+
+<div class="author-note">
+    Made by Steve Drasco (steve.drasco@gmail.com)
 </div>
 
 <div class="controls">
@@ -278,7 +278,7 @@ function renderGrid() {{
         var boxOpacity = 0.2 + 0.8 * d.percentage;
         var div = document.createElement('div');
         div.className = 'ticker-box';
-        div.style.opacity = boxOpacity;
+        div.style.backgroundColor = 'rgba(167,215,197,' + boxOpacity + ')';
 
         div.dataset.ticker = d.ticker;
         div.dataset.percentage = d.percentage;
@@ -359,4 +359,4 @@ renderGrid();
 with open(output_file, 'w', encoding='utf-8') as f:
     f.write(html_template)
 
-print("HTML visualization with centered box and link to rehashed data generated:", output_file)
+print("HTML visualization updated.")

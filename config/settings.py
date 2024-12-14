@@ -1,4 +1,4 @@
-# config.settings
+# config/settings.py
 
 import logging
 import os
@@ -17,14 +17,14 @@ DATA_DIR = Path(__file__).parent.parent / "data"
 REPORT_DIR = Path(__file__).parent.parent / "html"
 
 # Date range for downloading data
-#START_DATE = date(2003, 9, 1)  # earliest date in flat files
-#START_DATE = date(2009, 3, 25)  # earliest date in financials
+FLAT_FILES_START_DATE = date(2003, 9, 1)  # earliest date in flat files
+FINANCIALS_START_DATE = date(2009, 3, 25)  # earliest date in financials
 START_DATE = date(2008, 12, 26)  # start of earliest quarter with financials
 END_DATE = date(2024, 12, 6)
 # END_DATE = date.today() - timedelta(days=1)  # or yesterday if you want more
 
 # Number of tickers that we'll be allowed to buy
-NUM_TICKERS = 500
+NUM_TICKERS = 1500
 
 # Credentials for Polygon.io
 POLYGON_S3_KEY = os.getenv("POLYGONIO_ACCESS_KEY")  # Access Key
@@ -41,10 +41,10 @@ POLYGON_BUCKET = "flatfiles"
 
 # Proxies for market and money market performance
 MARKET_PROXY = "SPY"  # starts pre 2003
-MONEY_MARKET_PROXY = "BIL"  # starts pre 2003, likely better proxy than SHY
-#MONEY_MARKET_PROXY = "SHY"  # starts around 2008
+#MONEY_MARKET_PROXY = "SHY"  # starts pre 2003
+MONEY_MARKET_PROXY = "BIL"  # starts around 2008, likely better proxy than SHY though
 
 # Backtesting parameters
 INITIAL_FUNDS = 100000  # starting capital
-REBALANCE_FREQUENCY = "quarterly"  # can be "monthly", "quarterly", "annual", or "daily"
+REBALANCE_FREQUENCY = "weekly"  # can be "daily", "weekly", "monthly", "quarterly", or "annual"
 DIVIDEND_ADJUSTMENT = False

@@ -8,13 +8,13 @@ from pathlib import Path
 from data.aggs_fetcher import AggregatesFetcher
 from data.aggs_processor import AggregatesProcessor
 from data.financials_fetcher import FinancialsFetcher
-from config.settings import DATA_DIR, NUM_TICKERS, INITIAL_FUNDS, REBALANCE_FREQUENCY, MARKET_PROXY, MONEY_MARKET_PROXY, REPORT_DIR
+from config.settings import DATA_DIR, NUM_TICKERS, INITIAL_FUNDS, REBALANCE_FREQUENCY, MARKET_PROXY, MONEY_MARKET_PROXY, REPORT_DIR, START_DATE, END_DATE
 from utils.logging_utils import configure_logging
 
 # Updated import: load_proxies() instead of load_market_proxy()
 from data.data_loaders import load_proxies, load_top_stocks, load_financials
 from strategies.canslim_calculator import calculate_canslim_indicators
-from utils.calendar_utils import get_quarter_end_dates, get_rebalance_dates
+from utils.calendar_utils import get_rebalance_dates
 from strategies.strategy_definitions import market_only_strategy, risk_managed_market_strategy, canslim_strategy
 from backtesting.backtester import run_backtest
 from utils.metrics import compute_performance_metrics
@@ -83,16 +83,16 @@ def main():
         logger.info("CANSLIM indicators calculated.")
 
         # Step 5: Determine Rebalance Dates
-        market_only_df = proxies_df[proxies_df["ticker"] == MARKET_PROXY].copy()
         logger.info("Step 5: Determining rebalance dates...")
-        quarter_ends_df = get_quarter_end_dates(financials_df, "AAPL")
-        rebalance_dates = get_rebalance_dates(market_only_df, quarter_ends_df)
+        market_only_df = proxies_df[proxies_df["ticker"] == MARKET_PROXY].copy()
+        # Pass START_DATE and END_DATE to get_rebalance_dates
+        rebalance_dates = get_rebalance_dates(market_only_df, REBALANCE_FREQUENCY, start_date=START_DATE, end_date=END_DATE)
 
         if not rebalance_dates:
             logger.warning("No rebalance dates found. Exiting after CANSLIM calculation.")
             return
 
-        logger.info(f"Rebalancing {REBALANCE_FREQUENCY}, dates: {rebalance_dates[:5]}...")
+        logger.info(f"Rebalancing {REBALANCE_FREQUENCY}, first few dates: {rebalance_dates[:5]}...")
 
         # Step 6: Run Backtests
         logger.info("Step 6: Running backtests...")

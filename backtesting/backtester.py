@@ -3,7 +3,7 @@
 import logging
 import pandas as pd
 from datetime import timedelta
-from config.settings import INITIAL_FUNDS, MARKET_PROXY, MONEY_MARKET_PROXY
+from config.settings import INITIAL_FUNDS, MARKET_PROXY, MONEY_MARKET_PROXY, REBALANCE_FREQUENCY
 from utils.logging_utils import configure_logging
 
 # Configure logging
@@ -15,7 +15,8 @@ def run_backtest(strategy_func, proxies_df, top_stocks_df, rebalance_dates, init
     Run a backtest for a given strategy.
 
     Parameters:
-        strategy_func (callable): The strategy function that takes (rebalance_date, portfolio_value, data_dict, is_first_rebalance)
+        strategy_func (callable): The strategy function that takes 
+                                  (rebalance_date, portfolio_value, data_dict, is_first_rebalance)
                                   and returns an allocation dict {ticker: weight}.
         proxies_df (pd.DataFrame): Combined DataFrame with both MARKET_PROXY and MONEY_MARKET_PROXY tickers.
                                    Must have columns: date, ticker, close.
@@ -86,6 +87,11 @@ def run_backtest(strategy_func, proxies_df, top_stocks_df, rebalance_dates, init
         current_date = pd.to_datetime(current_date).normalize()
 
         if current_date.date() in rebalance_dates:
+            # Log rebalancing at INFO level, including the start_date and REBALANCE_FREQUENCY
+            logger.info(
+                f"Rebalancing portfolio on {current_date.date()}, frequency: {REBALANCE_FREQUENCY}"
+            )
+
             logger.debug(f"Rebalance date {current_date.date()} encountered.")
             portfolio_value = compute_portfolio_value(current_date, holdings)
             logger.debug(f"Portfolio value before rebalancing: {portfolio_value}")

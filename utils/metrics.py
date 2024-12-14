@@ -5,7 +5,10 @@ import pandas as pd
 import numpy as np
 from pathlib import Path
 from config.settings import DATA_DIR, MONEY_MARKET_PROXY
+from utils.logging_utils import configure_logging
 
+# Configure logging
+configure_logging()
 logger = logging.getLogger(__name__)
 
 def compute_daily_returns(portfolio_history: pd.DataFrame):

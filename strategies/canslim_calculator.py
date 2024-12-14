@@ -22,7 +22,9 @@ def calculate_m(market_only_df: pd.DataFrame, criteria_config: dict) -> pd.DataF
     # M criteria by default checks if 50-MA > 200-MA
     use_ma_cross = criteria_config["M"].get("use_ma_cross", True)
     if use_ma_cross:
-        market_only_df["M"] = market_only_df["50_MA"] > market_only_df["200_MA"]
+        market_only_df["M"] = (market_only_df["close"] > market_only_df["50_MA"]) & \
+                              (market_only_df["50_MA"] > market_only_df["200_MA"])
+        #market_only_df["M"] = market_only_df["50_MA"] > market_only_df["200_MA"]
     else:
         # If a different logic is specified, implement it here
         # For now, just default to True if not using MA cross logic
@@ -180,12 +182,12 @@ def calculate_canslim_indicators(proxies_df: pd.DataFrame,
     # Defaults if not provided
     if criteria_config is None:
         criteria_config = {
-            "C": {"quarterly_growth_threshold": 0.1},
-            "A": {"annual_growth_threshold": 0.1},
+            "C": {"quarterly_growth_threshold": 0.25},
+            "A": {"annual_growth_threshold": 0.2},
             "N": {"lookback_period": 252},
-            "S": {"volume_factor": 1.25},
+            "S": {"volume_factor": 1.5},
             "L": {"return_diff_threshold": 0.0},
-            "I": {"volume_factor": 1.25},
+            "I": {"volume_factor": 1.5},
             "M": {"use_ma_cross": True}
         }
 
@@ -227,12 +229,12 @@ def calculate_canslim_indicators(proxies_df: pd.DataFrame,
     canslim_criteria_dict = {
         "C": {
             "name": "Current Quarterly Earnings",
-            "description": "Quarterly year-over-year growth of earnings per share",
+            "description": "Quarterly year-over-year EPS growth",
             "parameters": criteria_config["C"]["quarterly_growth_threshold"]
         },
         "A": {
             "name": "Annual Earnings Growth",
-            "description": "Year-over-year growth of earnings per share for the entire year",
+            "description": "Year-over-year growth of EPS for the entire year",
             "parameters": criteria_config["A"]["annual_growth_threshold"]
         },
         "N": {
@@ -258,7 +260,7 @@ def calculate_canslim_indicators(proxies_df: pd.DataFrame,
         "M": {
             "name": "Market Direction",
             "description": "Criteria for bull market",
-            "parameters": 'The market’s 50-day moving average is above its 200-day moving average.'
+            "parameters": 'close > 50-day > 200-day'
         }
     }
 

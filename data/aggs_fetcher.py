@@ -15,7 +15,7 @@ from config.settings import (
     POLYGON_S3_ENDPOINT,
     POLYGON_BUCKET,
     DATA_DIR,
-    START_DATE,
+    FLAT_FILES_START_DATE,
     END_DATE,
 )
 from utils.logging_utils import configure_logging 
@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 class AggregatesFetcher:
     def __init__(self):
         self.feather_data_dir = Path(DATA_DIR) / "us_stocks_sip/day_aggs_feather"
-        self.start_date = START_DATE
+        self.start_date = FLAT_FILES_START_DATE
         self.end_date = END_DATE
 
         # S3 session setup

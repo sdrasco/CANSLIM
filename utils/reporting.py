@@ -6,6 +6,7 @@ import io
 import matplotlib.pyplot as plt
 import pandas as pd
 from utils.logging_utils import configure_logging
+from config.settings import INITIAL_FUNDS, START_DATE, END_DATE, REBALANCE_FREQUENCY
 
 # Configure logging
 configure_logging()
@@ -118,7 +119,7 @@ def generate_canslim_criteria_section(canslim_criteria_dict):
     <h2>CANSLIM Criteria</h2>
     <table class="canslim-table">
       <thead>
-        <tr><th>Letter</th><th>Name</th><th>Description</th><th>Parameters</th></tr>
+        <tr><th>Letter</th><th>Name</th><th>Description</th><th>Parameter/Threshold</th></tr>
       </thead>
       <tbody>
         {rows}
@@ -172,11 +173,12 @@ def create_html_report(strategies_data,
                        canslim_investments=None, 
                        output_path="report.html"):
     """
-    Create an HTML report that contains:
+    Create an HTML report that includes:
+    - A summary at the top about initial investment, start/end dates, and rebalancing frequency
     - One chart with all strategies' equity curves overlayed
     - One table with all strategies' metrics side-by-side
     - A summary of the CANSLIM criteria and parameters
-    - A table of CANSLIM non-money-market investment periods (without portfolio value before rebalance)
+    - A table of CANSLIM non-money-market investment periods
     """
     if canslim_criteria_dict is None:
         canslim_criteria_dict = {}
@@ -211,6 +213,11 @@ def create_html_report(strategies_data,
       padding-bottom: 5px;
       margin-top: 40px;
     }
+    p.summary {
+      font-size: 14px;
+      color: #555;
+      margin: 10px 0 30px 0;
+    }
     .metrics-table, .canslim-table, .canslim-investments-table {
       width: 100%;
       border-collapse: collapse;
@@ -241,11 +248,19 @@ def create_html_report(strategies_data,
     canslim_criteria_html = generate_canslim_criteria_section(canslim_criteria_dict) if canslim_criteria_dict else ""
     canslim_investments_html = generate_canslim_investments_table(canslim_investments) if canslim_investments else ""
 
+    # Add a summary paragraph at the top
+    summary_text = f"""
+    This report presents the results of a backtest starting with an initial investment of {INITIAL_FUNDS:,}. 
+    The analysis covers the period from {START_DATE} to {END_DATE}, and the portfolio was rebalanced 
+    at a {REBALANCE_FREQUENCY.title()} frequency.
+    """
+
     html_content = "<!DOCTYPE html><html><head><meta charset='UTF-8'>"
     html_content += "<title>Backtest Report</title>"
     html_content += css
     html_content += "</head><body><div class='container'>"
     html_content += "<h1>Backtest Results</h1>"
+    html_content += f"<p class='summary'>{summary_text}</p>"
 
     # Equity curves
     html_content += "<h2>Equity Curves</h2>"

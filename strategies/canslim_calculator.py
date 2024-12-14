@@ -22,9 +22,9 @@ def calculate_m(market_only_df: pd.DataFrame, criteria_config: dict) -> pd.DataF
     # M criteria by default checks if 50-MA > 200-MA
     use_ma_cross = criteria_config["M"].get("use_ma_cross", True)
     if use_ma_cross:
-        market_only_df["M"] = (market_only_df["close"] > market_only_df["50_MA"]) & \
-                              (market_only_df["50_MA"] > market_only_df["200_MA"])
-        #market_only_df["M"] = market_only_df["50_MA"] > market_only_df["200_MA"]
+        #market_only_df["M"] = (market_only_df["close"] > market_only_df["50_MA"]) & \
+        #                      (market_only_df["50_MA"] > market_only_df["200_MA"])
+        market_only_df["M"] = market_only_df["50_MA"] > market_only_df["200_MA"]
     else:
         # If a different logic is specified, implement it here
         # For now, just default to True if not using MA cross logic
@@ -260,7 +260,8 @@ def calculate_canslim_indicators(proxies_df: pd.DataFrame,
         "M": {
             "name": "Market Direction",
             "description": "Criteria for bull market",
-            "parameters": 'close > 50-day > 200-day'
+            #"parameters": 'close > 50-day > 200-day'
+            "parameters": '50-day > 200-day'
         }
     }
 

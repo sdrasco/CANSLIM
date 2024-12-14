@@ -19,14 +19,13 @@ def calculate_m(market_only_df: pd.DataFrame, criteria_config: dict) -> pd.DataF
     market_only_df["50_MA"] = market_only_df["close"].rolling(50, min_periods=1).mean()
     market_only_df["200_MA"] = market_only_df["close"].rolling(200, min_periods=1).mean()
 
-    # M criteria is set to whether 50-MA > 200-MA by default
-    # If criteria_config changes how M is calculated, incorporate here.
+    # M criteria by default checks if 50-MA > 200-MA
     use_ma_cross = criteria_config["M"].get("use_ma_cross", True)
     if use_ma_cross:
         market_only_df["M"] = market_only_df["50_MA"] > market_only_df["200_MA"]
     else:
-        # If a different logic is specified, implement it
-        # For now, just default to True if no MA cross logic
+        # If a different logic is specified, implement it here
+        # For now, just default to True if not using MA cross logic
         market_only_df["M"] = True
 
     return market_only_df
@@ -35,8 +34,8 @@ def calculate_m(market_only_df: pd.DataFrame, criteria_config: dict) -> pd.DataF
 def compute_c_a_from_financials(financials_df: pd.DataFrame, criteria_config: dict):
     """
     Compute C and A indicators from the financials data:
-    - C: Quarterly EPS growth >= quarterly_growth_threshold (default 25%)
-    - A: Annual EPS growth >= annual_growth_threshold (default 20%)
+    - C: Quarterly EPS growth >= quarterly_growth_threshold (default 0.25)
+    - A: Annual EPS growth >= annual_growth_threshold (default 0.20)
 
     Returns a DataFrame with columns: ticker, end_date, C, A.
     """
@@ -172,17 +171,7 @@ def calculate_canslim_indicators(proxies_df: pd.DataFrame,
                                  financials_df: pd.DataFrame,
                                  criteria_config=None):
     """
-    Calculate CANSLIM indicators. criteria_config can be used to parameterize thresholds:
-    For example:
-    criteria_config = {
-        "C": {"quarterly_growth_threshold": 0.25},
-        "A": {"annual_growth_threshold": 0.20},
-        "N": {"lookback_period": 252},
-        "S": {"volume_factor": 1.5},
-        "L": {"return_diff_threshold": 0.0},
-        "I": {"volume_factor": 1.5},
-        "M": {"use_ma_cross": True}
-    }
+    Calculate CANSLIM indicators. criteria_config can be used to parameterize thresholds.
 
     Returns:
     proxies_df, top_stocks_df, financials_df, canslim_criteria_dict
@@ -191,12 +180,12 @@ def calculate_canslim_indicators(proxies_df: pd.DataFrame,
     # Defaults if not provided
     if criteria_config is None:
         criteria_config = {
-            "C": {"quarterly_growth_threshold": 0.25},
-            "A": {"annual_growth_threshold": 0.20},
+            "C": {"quarterly_growth_threshold": 0.1},
+            "A": {"annual_growth_threshold": 0.1},
             "N": {"lookback_period": 252},
-            "S": {"volume_factor": 1.5},
+            "S": {"volume_factor": 1.25},
             "L": {"return_diff_threshold": 0.0},
-            "I": {"volume_factor": 1.5},
+            "I": {"volume_factor": 1.25},
             "M": {"use_ma_cross": True}
         }
 
@@ -205,7 +194,7 @@ def calculate_canslim_indicators(proxies_df: pd.DataFrame,
     market_only = calculate_m(market_only, criteria_config)
 
     proxies_df = proxies_df.drop(columns=["50_MA", "200_MA", "M"], errors="ignore")
-    proxies_df = proxies_df.merge(market_only[["date","50_MA","200_MA","M"]],
+    proxies_df = proxies_df.merge(market_only[["date", "50_MA", "200_MA", "M"]],
                                   on="date", how="left")
     proxies_df["M"] = proxies_df["M"].fillna(False).astype(bool)
 
@@ -234,42 +223,42 @@ def calculate_canslim_indicators(proxies_df: pd.DataFrame,
 
     logger.info("CANSLIM indicators computed.")
 
-    # Prepare a criteria dictionary for reporting
+    # Prepare a criteria dictionary for reporting with succinct parameters
     canslim_criteria_dict = {
         "C": {
             "name": "Current Quarterly Earnings",
-            "description": f"Quarterly EPS growth above {criteria_config['C']['quarterly_growth_threshold']*100}%.",
-            "parameters": criteria_config["C"]
+            "description": "Quarterly year-over-year growth of earnings per share",
+            "parameters": criteria_config["C"]["quarterly_growth_threshold"]
         },
         "A": {
             "name": "Annual Earnings Growth",
-            "description": f"Annual EPS growth above {criteria_config['A']['annual_growth_threshold']*100}%.",
-            "parameters": criteria_config["A"]
+            "description": "Year-over-year growth of earnings per share for the entire year",
+            "parameters": criteria_config["A"]["annual_growth_threshold"]
         },
         "N": {
-            "name": "New Products/Leadership/Highs",
-            "description": f"Stock hitting new highs over {criteria_config['N']['lookback_period']}-day period.",
-            "parameters": criteria_config["N"]
+            "name": "New High",
+            "description": "During lookback period (in days)",
+            "parameters": criteria_config["N"]["lookback_period"]
         },
         "S": {
-            "name": "Supply and Demand",
-            "description": f"Volume >= {criteria_config['S']['volume_factor']}x 50-day average.",
-            "parameters": criteria_config["S"]
+            "name": "Supply and Demand proxy",
+            "description": "volume / (50-day avg volume) > threshold",
+            "parameters": criteria_config["S"]["volume_factor"]
         },
         "L": {
-            "name": "Leader or Laggard",
-            "description": "Stock return outperforming market return.",
-            "parameters": criteria_config["L"]
+            "name": "Leader or Laggard proxy",
+            "description": "(stock return) >  (market return) + excess",
+            "parameters": criteria_config["L"]["return_diff_threshold"]
         },
         "I": {
-            "name": "Institutional Sponsorship",
-            "description": f"Close > open and volume > {criteria_config['I']['volume_factor']}x 50-day average.",
-            "parameters": criteria_config["I"]
+            "name": "Institutional Sponsorship proxy",
+            "description": "(close > open) and S",
+            "parameters": criteria_config["I"]["volume_factor"]
         },
         "M": {
             "name": "Market Direction",
-            "description": "Market uptrend indicated by 50-MA > 200-MA.",
-            "parameters": criteria_config["M"]
+            "description": "Criteria for bull market",
+            "parameters": 'The market’s 50-day moving average is above its 200-day moving average.'
         }
     }
 

@@ -87,6 +87,7 @@ def generate_combined_metrics_table(strategies_data):
 def generate_canslim_criteria_section(canslim_criteria_dict):
     """
     Generate an HTML section summarizing the CANSLIM criteria and their parameters.
+    Now that parameters is a single numeric or string value, we no longer treat it as a dict.
     """
     if not canslim_criteria_dict:
         return ""
@@ -95,8 +96,15 @@ def generate_canslim_criteria_section(canslim_criteria_dict):
     for letter, info in canslim_criteria_dict.items():
         name = info.get("name", letter)
         description = info.get("description", "")
-        params = info.get("parameters", {})
-        param_str = ", ".join([f"{k}: {v}" for k, v in params.items()])
+        param = info.get("parameters", "N/A")
+        
+        # Convert numeric params to a nicely formatted string
+        if isinstance(param, float):
+            param_str = f"{param:.2f}"
+        else:
+            # If param is not float (e.g., 'N/A' or a string), just convert to string
+            param_str = str(param)
+
         rows += f"""
         <tr>
           <td>{letter}</td>

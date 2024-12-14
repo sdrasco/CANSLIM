@@ -10,7 +10,7 @@ from utils.logging_utils import configure_logging
 configure_logging()
 logger = logging.getLogger(__name__)
 
-def calculate_m(market_only_df: pd.DataFrame) -> pd.DataFrame:
+def calculate_m(market_only_df: pd.DataFrame, criteria_config: dict) -> pd.DataFrame:
     if "close" not in market_only_df.columns:
         logger.error("Market proxy data missing 'close' column required for M computation.")
         return market_only_df
@@ -18,18 +18,25 @@ def calculate_m(market_only_df: pd.DataFrame) -> pd.DataFrame:
     market_only_df = market_only_df.sort_values("date")
     market_only_df["50_MA"] = market_only_df["close"].rolling(50, min_periods=1).mean()
     market_only_df["200_MA"] = market_only_df["close"].rolling(200, min_periods=1).mean()
-    market_only_df["M"] = (market_only_df["50_MA"] > market_only_df["200_MA"])
-    # market_only_df["M"] = (market_only_df["close"] > market_only_df["50_MA"]) & \
-    #                       (market_only_df["50_MA"] > market_only_df["200_MA"])
+
+    # M criteria is set to whether 50-MA > 200-MA by default
+    # If criteria_config changes how M is calculated, incorporate here.
+    use_ma_cross = criteria_config["M"].get("use_ma_cross", True)
+    if use_ma_cross:
+        market_only_df["M"] = market_only_df["50_MA"] > market_only_df["200_MA"]
+    else:
+        # If a different logic is specified, implement it
+        # For now, just default to True if no MA cross logic
+        market_only_df["M"] = True
+
     return market_only_df
 
-def compute_c_a_from_financials(financials_df: pd.DataFrame):
+
+def compute_c_a_from_financials(financials_df: pd.DataFrame, criteria_config: dict):
     """
     Compute C and A indicators from the financials data:
-    - C (quarterly EPS growth >= 25% yoy)
-    - A (annual EPS growth >= 20% yoy)
-
-    Uses 'end_date' as the reporting period end date column.
+    - C: Quarterly EPS growth >= quarterly_growth_threshold (default 25%)
+    - A: Annual EPS growth >= annual_growth_threshold (default 20%)
 
     Returns a DataFrame with columns: ticker, end_date, C, A.
     """
@@ -39,53 +46,27 @@ def compute_c_a_from_financials(financials_df: pd.DataFrame):
         logger.error(f"Financials data missing required columns: {missing}")
         return pd.DataFrame(columns=["ticker", "end_date", "C", "A"])
 
+    c_thresh = criteria_config["C"].get("quarterly_growth_threshold", 0.25)
+    a_thresh = criteria_config["A"].get("annual_growth_threshold", 0.20)
+
     logger.debug("Starting computation of C and A from financials.")
 
     # Process Quarterly (C)
     quarterly = financials_df[financials_df["timeframe"] == "quarterly"].copy()
-    if quarterly.empty:
-        logger.debug("No quarterly data found.")
-    else:
-        logger.debug(f"Quarterly data shape: {quarterly.shape}")
     quarterly.sort_values(["ticker", "fiscal_period", "fiscal_year"], inplace=True)
-
-    # Group by ticker and fiscal_period for prev_year_eps
     quarterly["prev_year_eps"] = quarterly.groupby(["ticker", "fiscal_period"])["diluted_eps"].shift(1)
-    # Calculate C
-    quarterly["C"] = ((quarterly["diluted_eps"] - quarterly["prev_year_eps"]) / quarterly["prev_year_eps"].abs()) >= 0.1 # suggested 0.25
-
-    # Check how many rows have C = True
+    quarterly["C"] = ((quarterly["diluted_eps"] - quarterly["prev_year_eps"]) / quarterly["prev_year_eps"].abs()) >= c_thresh
     c_true_count = quarterly["C"].sum()
-    logger.debug(f"C: Found {c_true_count} rows with quarterly EPS growth >= 25%")
+    logger.debug(f"C: Found {c_true_count} rows with quarterly EPS growth >= {c_thresh*100}%")
 
     # Process Annual (A)
     annual = financials_df[financials_df["timeframe"] == "annual"].copy()
-    if annual.empty:
-        logger.debug("No annual data found.")
-    else:
-        logger.debug(f"Annual data shape: {annual.shape}")
     annual.sort_values(["ticker", "fiscal_year"], inplace=True)
-
-    # Group by ticker for prev_year_eps
     annual["prev_year_eps"] = annual.groupby("ticker")["diluted_eps"].shift(1)
-
-    # Let's debug what prev_year_eps looks like
-    no_prev_year = annual["prev_year_eps"].isna().sum()
-    logger.debug(f"A: Out of {len(annual)} annual rows, {no_prev_year} have no prev_year_eps (first year of data?).")
-
-    # Compute A as EPS growth >= 20%
     annual["A_ratio"] = (annual["diluted_eps"] - annual["prev_year_eps"]) / annual["prev_year_eps"].abs()
-    # If prev_year_eps is zero or NaN, that could cause division by zero or NaN results. Check that:
-    invalid_ratios = annual["A_ratio"].isna().sum()
-    logger.debug(f"A: {invalid_ratios} rows have NaN ratio (likely due to missing prev_year_eps or zero EPS).")
-
-    annual["A"] = annual["A_ratio"] >= 0.10 # suggested 0.2
+    annual["A"] = annual["A_ratio"] >= a_thresh
     a_true_count = annual["A"].sum()
-    logger.debug(f"A: Found {a_true_count} rows with annual EPS growth >= 20%")
-
-    # Sample debug: print a few rows where A is True
-    a_true_rows = annual[annual["A"]].head(5)
-    logger.debug(f"Sample rows with A=True:\n{a_true_rows[['ticker','fiscal_year','diluted_eps','prev_year_eps','A_ratio']].to_string(index=False)}")
+    logger.debug(f"A: Found {a_true_count} rows with annual EPS growth >= {a_thresh*100}%")
 
     q_ca = quarterly[["ticker", "end_date", "C"]].drop_duplicates(["ticker", "end_date"])
     a_ca = annual[["ticker", "end_date", "A"]].drop_duplicates(["ticker", "end_date"])
@@ -96,22 +77,21 @@ def compute_c_a_from_financials(financials_df: pd.DataFrame):
         ca_df["C"] = ca_df["C"].fillna(False).astype(bool)
         ca_df["A"] = ca_df["A"].fillna(False).astype(bool)
 
-    # More debugging: How many rows end up in ca_df and how many are True?
     ca_rows = len(ca_df)
     ca_c_true = ca_df["C"].sum()
     ca_a_true = ca_df["A"].sum()
-    logger.debug(f"Final CA DF: {ca_rows} rows, with C=True in {ca_c_true} rows and A=True in {ca_a_true} rows.")
+    logger.debug(f"Final CA DF: {ca_rows} rows, C=True in {ca_c_true} rows, A=True in {ca_a_true} rows.")
 
     return ca_df
 
-def calculate_nsli(top_stocks_df: pd.DataFrame, market_only: pd.DataFrame) -> pd.DataFrame:
+
+def calculate_nsli(top_stocks_df: pd.DataFrame, market_only: pd.DataFrame, criteria_config: dict) -> pd.DataFrame:
     required_cols = {"ticker", "date", "close", "open", "volume"}
     if not required_cols.issubset(top_stocks_df.columns):
         missing = required_cols - set(top_stocks_df.columns)
         logger.error(f"Top stocks data missing required columns: {missing}")
         return top_stocks_df
 
-    # Sort both DataFrames by date
     top_stocks_df = top_stocks_df.sort_values(["ticker", "date"])
     market_only = market_only.sort_values("date")
 
@@ -119,34 +99,37 @@ def calculate_nsli(top_stocks_df: pd.DataFrame, market_only: pd.DataFrame) -> pd
     market_only["market_return"] = market_only["close"].pct_change().fillna(0)
 
     # Compute each stock's daily returns
-    # group by ticker and compute pct_change in close
     top_stocks_df["stock_return"] = top_stocks_df.groupby("ticker")["close"].pct_change().fillna(0)
 
     # Merge market returns into top_stocks_df by date
     top_stocks_df = top_stocks_df.merge(market_only[["date", "market_return"]], on="date", how="left")
 
-    # N: close at new 52-week high
+    # N: New High over a lookback period
+    lookback_period = criteria_config["N"].get("lookback_period", 252)
     top_stocks_df["52_week_high"] = top_stocks_df.groupby("ticker")["close"].transform(
-        lambda x: x.rolling(252, min_periods=1).max()
+        lambda x: x.rolling(lookback_period, min_periods=1).max()
     )
     top_stocks_df["N"] = top_stocks_df["close"] >= top_stocks_df["52_week_high"]
 
-    # S: volume >= 1.5 * 50-day average
+    # S: volume >= volume_factor * 50-day average
+    s_factor = criteria_config["S"].get("volume_factor", 1.5)
     top_stocks_df["50_day_vol_avg"] = top_stocks_df.groupby("ticker")["volume"].transform(
         lambda x: x.rolling(50, min_periods=1).mean()
     )
-    top_stocks_df["S"] = top_stocks_df["volume"] >= top_stocks_df["50_day_vol_avg"] * 1.5
+    top_stocks_df["S"] = top_stocks_df["volume"] >= top_stocks_df["50_day_vol_avg"] * s_factor
 
-    # L: stock_return > market_return?
-    # If stock outperformed market today, L = True, else False
-    top_stocks_df["L"] = top_stocks_df["stock_return"] > top_stocks_df["market_return"]
+    # L: stock_return > market_return (+ optional threshold)
+    l_diff = criteria_config["L"].get("return_diff_threshold", 0.0)
+    top_stocks_df["L"] = (top_stocks_df["stock_return"] - top_stocks_df["market_return"]) > l_diff
 
-    # I: close > open and volume spike
+    # I: close > open and volume > volume_factor * 50-day avg
+    i_factor = criteria_config["I"].get("volume_factor", 1.5)
     top_stocks_df["I"] = (top_stocks_df["close"] > top_stocks_df["open"]) & (
-        top_stocks_df["volume"] > top_stocks_df["50_day_vol_avg"] * 1.5
+        top_stocks_df["volume"] > top_stocks_df["50_day_vol_avg"] * i_factor
     )
 
     return top_stocks_df
+
 
 def merge_ca_into_top_stocks(top_stocks_df: pd.DataFrame, ca_df: pd.DataFrame) -> pd.DataFrame:
     required = {"ticker", "end_date", "C", "A"}
@@ -183,12 +166,43 @@ def merge_ca_into_top_stocks(top_stocks_df: pd.DataFrame, ca_df: pd.DataFrame) -
     top_stocks_df = pd.concat(result_parts, ignore_index=True)
     return top_stocks_df
 
+
 def calculate_canslim_indicators(proxies_df: pd.DataFrame,
                                  top_stocks_df: pd.DataFrame,
-                                 financials_df: pd.DataFrame):
+                                 financials_df: pd.DataFrame,
+                                 criteria_config=None):
+    """
+    Calculate CANSLIM indicators. criteria_config can be used to parameterize thresholds:
+    For example:
+    criteria_config = {
+        "C": {"quarterly_growth_threshold": 0.25},
+        "A": {"annual_growth_threshold": 0.20},
+        "N": {"lookback_period": 252},
+        "S": {"volume_factor": 1.5},
+        "L": {"return_diff_threshold": 0.0},
+        "I": {"volume_factor": 1.5},
+        "M": {"use_ma_cross": True}
+    }
+
+    Returns:
+    proxies_df, top_stocks_df, financials_df, canslim_criteria_dict
+    """
+
+    # Defaults if not provided
+    if criteria_config is None:
+        criteria_config = {
+            "C": {"quarterly_growth_threshold": 0.25},
+            "A": {"annual_growth_threshold": 0.20},
+            "N": {"lookback_period": 252},
+            "S": {"volume_factor": 1.5},
+            "L": {"return_diff_threshold": 0.0},
+            "I": {"volume_factor": 1.5},
+            "M": {"use_ma_cross": True}
+        }
+
     logger.info("Calculating M in market proxy data...")
     market_only = proxies_df[proxies_df["ticker"] == MARKET_PROXY].copy()
-    market_only = calculate_m(market_only)
+    market_only = calculate_m(market_only, criteria_config)
 
     proxies_df = proxies_df.drop(columns=["50_MA", "200_MA", "M"], errors="ignore")
     proxies_df = proxies_df.merge(market_only[["date","50_MA","200_MA","M"]],
@@ -196,10 +210,10 @@ def calculate_canslim_indicators(proxies_df: pd.DataFrame,
     proxies_df["M"] = proxies_df["M"].fillna(False).astype(bool)
 
     logger.info("Computing C and A from financial data...")
-    ca_df = compute_c_a_from_financials(financials_df)
+    ca_df = compute_c_a_from_financials(financials_df, criteria_config)
 
     logger.info("Calculating N, S, L, I in top stocks data...")
-    top_stocks_df = calculate_nsli(top_stocks_df, market_only)
+    top_stocks_df = calculate_nsli(top_stocks_df, market_only, criteria_config)
 
     logger.info("Merging C and A into top stocks data...")
     top_stocks_df = merge_ca_into_top_stocks(top_stocks_df, ca_df)
@@ -219,4 +233,44 @@ def calculate_canslim_indicators(proxies_df: pd.DataFrame,
                                        top_stocks_df["I"])
 
     logger.info("CANSLIM indicators computed.")
-    return proxies_df, top_stocks_df, financials_df
+
+    # Prepare a criteria dictionary for reporting
+    canslim_criteria_dict = {
+        "C": {
+            "name": "Current Quarterly Earnings",
+            "description": f"Quarterly EPS growth above {criteria_config['C']['quarterly_growth_threshold']*100}%.",
+            "parameters": criteria_config["C"]
+        },
+        "A": {
+            "name": "Annual Earnings Growth",
+            "description": f"Annual EPS growth above {criteria_config['A']['annual_growth_threshold']*100}%.",
+            "parameters": criteria_config["A"]
+        },
+        "N": {
+            "name": "New Products/Leadership/Highs",
+            "description": f"Stock hitting new highs over {criteria_config['N']['lookback_period']}-day period.",
+            "parameters": criteria_config["N"]
+        },
+        "S": {
+            "name": "Supply and Demand",
+            "description": f"Volume >= {criteria_config['S']['volume_factor']}x 50-day average.",
+            "parameters": criteria_config["S"]
+        },
+        "L": {
+            "name": "Leader or Laggard",
+            "description": "Stock return outperforming market return.",
+            "parameters": criteria_config["L"]
+        },
+        "I": {
+            "name": "Institutional Sponsorship",
+            "description": f"Close > open and volume > {criteria_config['I']['volume_factor']}x 50-day average.",
+            "parameters": criteria_config["I"]
+        },
+        "M": {
+            "name": "Market Direction",
+            "description": "Market uptrend indicated by 50-MA > 200-MA.",
+            "parameters": criteria_config["M"]
+        }
+    }
+
+    return proxies_df, top_stocks_df, financials_df, canslim_criteria_dict

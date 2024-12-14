@@ -10,7 +10,7 @@ from utils.logging_utils import configure_logging
 configure_logging()
 logger = logging.getLogger(__name__)
 
-def run_backtest(strategy_func, proxies_df, top_stocks_df, rebalance_dates, initial_funds=INITIAL_FUNDS):
+def run_backtest(strategy_func, proxies_df, top_stocks_df, rebalance_dates, initial_funds=INITIAL_FUNDS, data_dict=None):
     """
     Run a backtest for a given strategy.
 
@@ -22,15 +22,20 @@ def run_backtest(strategy_func, proxies_df, top_stocks_df, rebalance_dates, init
         top_stocks_df (pd.DataFrame): Top stocks data with date, ticker, close, and CANSLI columns.
         rebalance_dates (list of date): The dates on which to rebalance the portfolio.
         initial_funds (float): The initial amount of money to start with.
+        data_dict (dict, optional): A dictionary to pass additional data to the strategy. The run_backtest
+                                    will ensure `proxies_df` and `top_stocks_df` are in this dict.
 
     Returns:
         portfolio_history (pd.DataFrame): DataFrame with columns ['date', 'portfolio_value'] representing the daily value.
     """
 
-    data_dict = {
-        "proxies_df": proxies_df,
-        "top_stocks_df": top_stocks_df
-    }
+    # If no data_dict is provided, create an empty one
+    if data_dict is None:
+        data_dict = {}
+
+    # Ensure proxies_df and top_stocks_df are in data_dict
+    data_dict["proxies_df"] = proxies_df
+    data_dict["top_stocks_df"] = top_stocks_df
 
     proxies_df = proxies_df.sort_values(["date", "ticker"])
     top_stocks_df = top_stocks_df.sort_values(["date", "ticker"])
@@ -93,6 +98,7 @@ def run_backtest(strategy_func, proxies_df, top_stocks_df, rebalance_dates, init
                 logger.debug(f"First rebalance day {current_date.date()}: overriding portfolio_value with initial_funds={initial_funds}")
                 portfolio_value = initial_funds
 
+            # Call the strategy function with data_dict included
             allocation = strategy_func(current_date.date(), portfolio_value, data_dict, is_first_rebalance=is_first_rebalance)
             logger.debug(f"Strategy allocation on {current_date.date()}: {allocation}")
 

@@ -1,6 +1,7 @@
+# main.py
+
 import logging
 import os
-import glob
 import json
 from pathlib import Path
 
@@ -68,7 +69,12 @@ def main():
         top_stocks_df = load_top_stocks()
         financials_df = load_financials()
 
-        proxies_df, top_stocks_df, financials_df = calculate_canslim_indicators(proxies_df, top_stocks_df, financials_df)
+        # Now calculate CANSLIM indicators and get criteria info
+        proxies_df, top_stocks_df, financials_df, canslim_criteria_dict = calculate_canslim_indicators(
+            proxies_df, 
+            top_stocks_df, 
+            financials_df
+        )
 
         # Save updated data if needed
         top_stocks_df.to_feather(DATA_DIR / "top_stocks.feather")
@@ -90,9 +96,24 @@ def main():
 
         # Step 6: Run Backtests
         logger.info("Step 6: Running backtests...")
-        market_history = run_backtest(market_only_strategy, proxies_df, top_stocks_df, rebalance_dates, initial_funds=INITIAL_FUNDS)
-        risk_managed_market_history = run_backtest(risk_managed_market_strategy, proxies_df, top_stocks_df, rebalance_dates, initial_funds=INITIAL_FUNDS)
-        canslim_history = run_backtest(canslim_strategy, proxies_df, top_stocks_df, rebalance_dates, initial_funds=INITIAL_FUNDS)
+
+        # For CANSLIM strategy, we pass a mutable dict to record investments
+        canslim_data_dict = {
+            "proxies_df": proxies_df,
+            "top_stocks_df": top_stocks_df
+        }
+
+        market_history = run_backtest(
+            market_only_strategy, proxies_df, top_stocks_df, rebalance_dates, initial_funds=INITIAL_FUNDS
+        )
+
+        risk_managed_market_history = run_backtest(
+            risk_managed_market_strategy, proxies_df, top_stocks_df, rebalance_dates, initial_funds=INITIAL_FUNDS
+        )
+
+        canslim_history = run_backtest(
+            canslim_strategy, proxies_df, top_stocks_df, rebalance_dates, initial_funds=INITIAL_FUNDS, data_dict=canslim_data_dict
+        )
 
         # Step 7: Compute Metrics
         logger.info("Step 7: Computing metrics...")
@@ -106,9 +127,18 @@ def main():
             ("CANSLIM", canslim_history, canslim_metrics)
         ]
 
-        # Step 8: Generate Combined Report (single chart and table)
+        # Retrieve CANSLIM investments recorded by the strategy
+        canslim_investments = canslim_data_dict.get("canslim_investments", [])
+
+        # Step 8: Generate Combined Report
+        # Include CANSLIM criteria and investments data for additional detail
         logger.info("Step 8: Generating combined HTML report...")
-        create_html_report(strategies_data, output_path=REPORT_DIR / "backtest_report.html")
+        create_html_report(
+            strategies_data, 
+            canslim_criteria_dict=canslim_criteria_dict,
+            canslim_investments=canslim_investments,
+            output_path=REPORT_DIR / "backtest_report.html"
+        )
 
         logger.info("All steps completed successfully.")
 

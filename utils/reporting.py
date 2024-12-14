@@ -1,3 +1,5 @@
+# utils/reporting.py
+
 import logging
 import base64
 import io
@@ -19,11 +21,13 @@ def generate_combined_equity_curve_chart(strategies_data):
     
     for i, (strategy_name, portfolio_history, metrics) in enumerate(strategies_data):
         color = colors[i % len(colors)]
-        ax.plot(portfolio_history["date"], 
-                portfolio_history["portfolio_value"], 
-                label=strategy_name, 
-                linewidth=2, 
-                color=color)
+        ax.plot(
+            portfolio_history["date"], 
+            portfolio_history["portfolio_value"], 
+            label=strategy_name, 
+            linewidth=2, 
+            color=color
+        )
 
     ax.set_title("Equity Curves - All Strategies", fontsize=14, color="#264653")
     ax.set_xlabel("Date", color="#264653")
@@ -80,11 +84,98 @@ def generate_combined_metrics_table(strategies_data):
     """
     return table_html
 
-def create_html_report(strategies_data, output_path="report.html"):
+def generate_canslim_criteria_section(canslim_criteria_dict):
     """
-    Create an HTML report that contains one chart with all strategies' equity curves overlayed,
-    and one table with all strategies' metrics side-by-side.
+    Generate an HTML section summarizing the CANSLIM criteria and their parameters.
     """
+    if not canslim_criteria_dict:
+        return ""
+
+    rows = ""
+    for letter, info in canslim_criteria_dict.items():
+        name = info.get("name", letter)
+        description = info.get("description", "")
+        params = info.get("parameters", {})
+        param_str = ", ".join([f"{k}: {v}" for k, v in params.items()])
+        rows += f"""
+        <tr>
+          <td>{letter}</td>
+          <td>{name}</td>
+          <td>{description}</td>
+          <td>{param_str}</td>
+        </tr>
+        """
+
+    html = f"""
+    <h2>CANSLIM Criteria</h2>
+    <table class="canslim-table">
+      <thead>
+        <tr><th>Letter</th><th>Name</th><th>Description</th><th>Parameters</th></tr>
+      </thead>
+      <tbody>
+        {rows}
+      </tbody>
+    </table>
+    """
+    return html
+
+def generate_canslim_investments_table(canslim_investments):
+    """
+    Generate an HTML table detailing the CANSLIM non-money-market investment periods.
+    Each entry in canslim_investments might look like:
+    {
+       "date": some_date,
+       "investments": [{"ticker": t, "weight": w}, ...]
+    }
+
+    We've removed portfolio_value_before_rebalance from the display.
+    """
+    if not canslim_investments:
+        return ""
+
+    rows = ""
+    for entry in canslim_investments:
+        date = entry.get("date", "")
+        inv = entry.get("investments", [])
+        # Join tickers and weights as a string
+        inv_str = ", ".join([f"{d['ticker']} ({d['weight']:.2f})" for d in inv])
+        rows += f"""
+        <tr>
+          <td>{date}</td>
+          <td>{inv_str}</td>
+        </tr>
+        """
+
+    html = f"""
+    <h2>CANSLIM Investment Periods</h2>
+    <table class="canslim-investments-table">
+      <thead>
+        <tr><th>Date</th><th>Investments</th></tr>
+      </thead>
+      <tbody>
+        {rows}
+      </tbody>
+    </table>
+    """
+    return html
+
+def create_html_report(strategies_data, 
+                       canslim_criteria_dict=None, 
+                       canslim_investments=None, 
+                       output_path="report.html"):
+    """
+    Create an HTML report that contains:
+    - One chart with all strategies' equity curves overlayed
+    - One table with all strategies' metrics side-by-side
+    - A summary of the CANSLIM criteria and parameters
+    - A table of CANSLIM non-money-market investment periods (without portfolio value before rebalance)
+    """
+    if canslim_criteria_dict is None:
+        canslim_criteria_dict = {}
+
+    if canslim_investments is None:
+        canslim_investments = []
+
     css = """
     <style>
     body {
@@ -112,18 +203,18 @@ def create_html_report(strategies_data, output_path="report.html"):
       padding-bottom: 5px;
       margin-top: 40px;
     }
-    .metrics-table {
+    .metrics-table, .canslim-table, .canslim-investments-table {
       width: 100%;
       border-collapse: collapse;
       margin-top: 15px;
     }
-    .metrics-table th {
+    .metrics-table th, .canslim-table th, .canslim-investments-table th {
       text-align: left;
       background-color: #2a9d8f;
       color: #ffffff;
       padding: 8px;
     }
-    .metrics-table td {
+    .metrics-table td, .canslim-table td, .canslim-investments-table td {
       padding: 8px;
       border-bottom: 1px solid #e9ecef;
     }
@@ -139,6 +230,8 @@ def create_html_report(strategies_data, output_path="report.html"):
 
     img_base64 = generate_combined_equity_curve_chart(strategies_data)
     table_html = generate_combined_metrics_table(strategies_data)
+    canslim_criteria_html = generate_canslim_criteria_section(canslim_criteria_dict) if canslim_criteria_dict else ""
+    canslim_investments_html = generate_canslim_investments_table(canslim_investments) if canslim_investments else ""
 
     html_content = "<!DOCTYPE html><html><head><meta charset='UTF-8'>"
     html_content += "<title>Backtest Report</title>"
@@ -146,11 +239,21 @@ def create_html_report(strategies_data, output_path="report.html"):
     html_content += "</head><body><div class='container'>"
     html_content += "<h1>Backtest Results</h1>"
 
+    # Equity curves
     html_content += "<h2>Equity Curves</h2>"
     html_content += f"<img src='data:image/png;base64,{img_base64}' alt='Equity Curve' class='chart-image' />"
 
+    # Metrics
     html_content += "<h2>Metrics Comparison</h2>"
     html_content += table_html
+
+    # CANSLIM Criteria
+    if canslim_criteria_html:
+        html_content += canslim_criteria_html
+
+    # CANSLIM Investments
+    if canslim_investments_html:
+        html_content += canslim_investments_html
 
     html_content += "</div></body></html>"
 

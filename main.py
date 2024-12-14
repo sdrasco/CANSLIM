@@ -12,7 +12,7 @@ from utils.logging_utils import configure_logging
 
 # Updated import: load_proxies() instead of load_market_proxy()
 from data.data_loaders import load_proxies, load_top_stocks, load_financials
-from data.canslim_calculator import calculate_canslim_indicators
+from strategies.canslim_calculator import calculate_canslim_indicators
 from utils.calendar_utils import get_quarter_end_dates, get_rebalance_dates
 from strategies.strategy_definitions import market_only_strategy, risk_managed_market_strategy, canslim_strategy
 from backtesting.backtester import run_backtest
@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 
 def main():
     try:
+        # Remove old files to ensure a clean run
         files_to_remove = [
             "financials.feather", 
             "proxies.feather", 
@@ -99,24 +100,15 @@ def main():
         risk_managed_market_metrics = compute_performance_metrics(risk_managed_market_history)
         canslim_metrics = compute_performance_metrics(canslim_history)
 
-        # Load descriptions from JSON
-        desc_path = Path("strategies") / "descriptions.json"
-        if desc_path.exists():
-            with open(desc_path, "r", encoding="utf-8") as f:
-                strategy_descriptions = json.load(f)
-        else:
-            logger.warning(f"Descriptions file not found at {desc_path}. Using empty descriptions.")
-            strategy_descriptions = {}
-
-        # Step 8: Generate Report
-        logger.info("Step 8: Generating HTML report...")
         strategies_data = [
             (f"Market Only ({MARKET_PROXY})", market_history, market_metrics),
             (f"Risk Managed Market ({MONEY_MARKET_PROXY}-{MARKET_PROXY})", risk_managed_market_history, risk_managed_market_metrics),
             ("CANSLIM", canslim_history, canslim_metrics)
         ]
 
-        create_html_report(strategies_data, descriptions=strategy_descriptions, output_path=REPORT_DIR / "backtest_report.html")
+        # Step 8: Generate Combined Report (single chart and table)
+        logger.info("Step 8: Generating combined HTML report...")
+        create_html_report(strategies_data, output_path=REPORT_DIR / "backtest_report.html")
 
         logger.info("All steps completed successfully.")
 

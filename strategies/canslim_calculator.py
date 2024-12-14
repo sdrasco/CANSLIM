@@ -1,4 +1,4 @@
-# data/canslim_calculator.py
+# strategies/canslim_calculator.py
 
 import pandas as pd
 import logging

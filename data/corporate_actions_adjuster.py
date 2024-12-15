@@ -3,7 +3,7 @@
 import logging
 import pandas as pd
 import warnings
-from config.settings import DIVIDEND_ADJUSTMENT
+from config.settings import DIVIDEND_ADJUSTMENT, TICKER_ADJUSTMENT
 from data.splits_data_fetcher import fetch_splits_data
 from data.dividends_data_fetcher import fetch_dividends_data
 from data.ticker_events_data_fetcher import fetch_ticker_events
@@ -26,8 +26,9 @@ def adjust_for_corporate_actions(data: pd.DataFrame) -> pd.DataFrame:
         dividends_data = fetch_dividends_data(tickers)
         data = apply_dividends_adjustments(data, dividends_data)
 
-    events_data = fetch_ticker_events(tickers)
-    data = apply_ticker_events_adjustments(data, events_data)
+    if TICKER_ADJUSTMENT:
+        events_data = fetch_ticker_events(tickers)
+        data = apply_ticker_events_adjustments(data, events_data)
 
     logger.info("Corporate actions adjustments completed.")
     return data

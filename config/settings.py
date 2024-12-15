@@ -48,3 +48,4 @@ MONEY_MARKET_PROXY = "BIL"  # starts around 2008, likely better proxy than SHY t
 INITIAL_FUNDS = 100000  # starting capital
 REBALANCE_FREQUENCY = "weekly"  # can be "daily", "weekly", "monthly", "quarterly", or "annual"
 DIVIDEND_ADJUSTMENT = False
+TICKER_ADJUSTMENT = False

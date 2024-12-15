@@ -8,10 +8,9 @@ from pathlib import Path
 from data.aggs_fetcher import AggregatesFetcher
 from data.aggs_processor import AggregatesProcessor
 from data.financials_fetcher import FinancialsFetcher
-from config.settings import DATA_DIR, NUM_TICKERS, INITIAL_FUNDS, REBALANCE_FREQUENCY, MARKET_PROXY, MONEY_MARKET_PROXY, REPORT_DIR, START_DATE, END_DATE
+from config.settings import DATA_DIR, INITIAL_FUNDS, REBALANCE_FREQUENCY, MARKET_PROXY, MONEY_MARKET_PROXY, REPORT_DIR, START_DATE, END_DATE
 from utils.logging_utils import configure_logging
 
-# Updated import: load_proxies() instead of load_market_proxy()
 from data.data_loaders import load_proxies, load_top_stocks, load_financials
 from strategies.canslim_calculator import calculate_canslim_indicators
 from utils.calendar_utils import get_rebalance_dates
@@ -19,6 +18,7 @@ from strategies.strategy_definitions import market_only_strategy, risk_managed_m
 from backtesting.backtester import run_backtest
 from utils.metrics import compute_performance_metrics
 from utils.reporting import create_html_report
+import pandas as pd
 
 # Configure logging
 configure_logging()
@@ -49,8 +49,7 @@ def main():
         logger.info("Step 2: Processing aggregates data...")
         aggs_processor = AggregatesProcessor(
             base_dir=DATA_DIR / "us_stocks_sip/day_aggs_feather",
-            output_path=DATA_DIR / "processed_data.feather",
-            top_n_tickers=NUM_TICKERS,
+            output_path=DATA_DIR / "processed_data.feather"
         )
         aggs_processor.process()
         logger.info("Step 2 completed: Aggregates data processed.")
@@ -64,19 +63,16 @@ def main():
         # Step 4: Calculate CANSLIM Indicators
         logger.info("Step 4: Calculating CANSLIM indicators...")
 
-        # Load the combined proxies (both MARKET_PROXY and MONEY_MARKET_PROXY)
         proxies_df = load_proxies()
         top_stocks_df = load_top_stocks()
         financials_df = load_financials()
 
-        # Now calculate CANSLIM indicators and get criteria info
         proxies_df, top_stocks_df, financials_df, canslim_criteria_dict = calculate_canslim_indicators(
             proxies_df, 
             top_stocks_df, 
             financials_df
         )
 
-        # Save updated data if needed
         top_stocks_df.to_feather(DATA_DIR / "top_stocks.feather")
         proxies_df.to_feather(DATA_DIR / "proxies.feather")
 
@@ -85,7 +81,6 @@ def main():
         # Step 5: Determine Rebalance Dates
         logger.info("Step 5: Determining rebalance dates...")
         market_only_df = proxies_df[proxies_df["ticker"] == MARKET_PROXY].copy()
-        # Pass START_DATE and END_DATE to get_rebalance_dates
         rebalance_dates = get_rebalance_dates(market_only_df, REBALANCE_FREQUENCY, start_date=START_DATE, end_date=END_DATE)
 
         if not rebalance_dates:
@@ -94,13 +89,24 @@ def main():
 
         logger.info(f"Rebalancing {REBALANCE_FREQUENCY}, first few dates: {rebalance_dates[:5]}...")
 
+        # Load the S&P 500 historical snapshot
+        sp500_snapshot_path = DATA_DIR / "sp_500_historic_snapshot.feather"
+        if not sp500_snapshot_path.exists():
+            logger.error(f"S&P 500 historic snapshot file not found at {sp500_snapshot_path}.")
+            return
+        sp500_snapshot_df = pd.read_feather(sp500_snapshot_path)
+        # Ensure date is datetime and sorted
+        sp500_snapshot_df["date"] = pd.to_datetime(sp500_snapshot_df["date"], errors="coerce")
+        sp500_snapshot_df = sp500_snapshot_df.dropna(subset=["date"]).sort_values("date").reset_index(drop=True)
+
         # Step 6: Run Backtests
         logger.info("Step 6: Running backtests...")
 
-        # For CANSLIM strategy, we pass a mutable dict to record investments
+        # Pass the sp500_snapshot_df to the canslim strategy data dict
         canslim_data_dict = {
             "proxies_df": proxies_df,
-            "top_stocks_df": top_stocks_df
+            "top_stocks_df": top_stocks_df,
+            "sp500_snapshot_df": sp500_snapshot_df
         }
 
         market_history = run_backtest(
@@ -127,11 +133,10 @@ def main():
             ("CANSLIM", canslim_history, canslim_metrics)
         ]
 
-        # Retrieve CANSLIM investments recorded by the strategy
+        # Retrieve CANSLIM investments recorded by the strategy (if any)
         canslim_investments = canslim_data_dict.get("canslim_investments", [])
 
         # Step 8: Generate Combined Report
-        # Include CANSLIM criteria and investments data for additional detail
         logger.info("Step 8: Generating combined HTML report...")
         create_html_report(
             strategies_data, 

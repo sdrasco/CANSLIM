@@ -88,7 +88,7 @@ def run_backtest(strategy_func, proxies_df, top_stocks_df, rebalance_dates, init
 
         if current_date.date() in rebalance_dates:
             # Log rebalancing at INFO level, including the start_date and REBALANCE_FREQUENCY
-            logger.info(
+            logger.debug(
                 f"Rebalancing portfolio on {current_date.date()}, frequency: {REBALANCE_FREQUENCY}"
             )
 

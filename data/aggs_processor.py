@@ -2,10 +2,8 @@
 
 import pandas as pd
 import logging
-import asyncio
-import httpx
 from pathlib import Path
-from config.settings import DATA_DIR, MARKET_PROXY, MONEY_MARKET_PROXY, POLYGON_API_KEY
+from config.settings import DATA_DIR, MARKET_PROXY, MONEY_MARKET_PROXY, START_DATE, END_DATE
 from utils.logging_utils import configure_logging
 from data.corporate_actions_adjuster import adjust_for_corporate_actions
 
@@ -13,11 +11,12 @@ from data.corporate_actions_adjuster import adjust_for_corporate_actions
 configure_logging()
 logger = logging.getLogger(__name__)
 
+SP500_SNAPSHOT_FILE = DATA_DIR / "sp_500_historic_snapshot.feather"
+
 class AggregatesProcessor:
-    def __init__(self, base_dir, output_path=None, top_n_tickers=1000):
+    def __init__(self, base_dir, output_path=None):
         self.base_dir = Path(base_dir)
         self.output_path = Path(DATA_DIR) / "processed_data.feather" if output_path is None else Path(output_path)
-        self.top_n_tickers = top_n_tickers
         self.data = pd.DataFrame()
         self.top_stocks = []
 
@@ -55,17 +54,9 @@ class AggregatesProcessor:
             missing_ticker_count = self.data["ticker"].isna().sum()
             self.data = self.data[self.data["ticker"].notna()]
 
-            test_ticker_pattern = r"(^Z.*ZZT$|^[A-Z]+TEST\.G$)"
-            before_test_ticker_exclusion = len(self.data)
-            self.data = self.data[~self.data["ticker"].str.match(test_ticker_pattern, na=False)]
-            test_ticker_excluded_count = before_test_ticker_exclusion - len(self.data)
-
             if missing_ticker_count > 0:
                 logger.info(f"Excluded {missing_ticker_count} rows with missing or empty tickers.")
-            if test_ticker_excluded_count > 0:
-                logger.info(f"Excluded {test_ticker_excluded_count} rows with test tickers '{test_ticker_pattern}'.")
-            if missing_ticker_count == 0 and test_ticker_excluded_count == 0:
-                logger.info("No rows excluded for missing or test tickers.")
+
         else:
             logger.warning("Column 'ticker' does not exist in the data. Skipping ticker-related exclusions.")
 
@@ -75,90 +66,59 @@ class AggregatesProcessor:
         logger.info(f"Final dataset contains {final_row_count} rows.")
         return True
 
-    async def fetch_ticker_type(self, session, ticker, max_retries=3):
-        url = f"https://api.polygon.io/v3/reference/tickers/{ticker}"
-        params = {"apiKey": POLYGON_API_KEY}
+    def select_top_stocks_from_sp500(self):
+        """
+        Load sp_500_historic_snapshot.feather, filter by [START_DATE, END_DATE],
+        and collect all tickers that appear on any date in that range.
+        """
 
-        for attempt in range(1, max_retries + 1):
-            try:
-                response = await session.get(url, params=params, timeout=10)
-                if response.status_code == 200:
-                    json_response = response.json()
-                    results = json_response.get("results", {})
-                    if isinstance(results, dict) and results:
-                        ticker_type = results.get("type")
-                        if ticker_type == "CS":
-                            return ticker
-                        else:
-                            return None
-                    else:
-                        return None
-                elif response.status_code == 404:
-                    return None
-                elif response.status_code == 429:
-                    logger.error(f"Rate limit exceeded for {ticker}. Attempt {attempt}.")
-                    if attempt < max_retries:
-                        await asyncio.sleep(2 ** attempt)
-                        continue
-                    else:
-                        return None
-                else:
-                    logger.error(f"Failed to fetch ticker type for {ticker}, status {response.status_code}.")
-                    return None
-            except (httpx.TimeoutException, httpx.RequestError) as e:
-                logger.error(f"Network error for {ticker}: {e}")
-                if attempt < max_retries:
-                    await asyncio.sleep(2 ** attempt)
-                    continue
-                else:
-                    return None
-            except Exception as e:
-                logger.error(f"Unexpected error fetching type for {ticker}: {e}")
-                return None
-        return None
-
-    async def filter_top_n_to_common_stocks(self, ranked_tickers):
-        common_stocks = []
-        async with httpx.AsyncClient() as session:
-            for ticker in ranked_tickers:
-                if len(common_stocks) >= self.top_n_tickers:
-                    break
-                result = await self.fetch_ticker_type(session, ticker)
-                if result:
-                    common_stocks.append(result)
-                    logger.info(f"{ticker} is common stock {len(common_stocks)} of {self.top_n_tickers}.")
-        logger.info(f"Selected {len(common_stocks)} common stocks.")
-        return common_stocks
-
-    def select_top_tickers(self):
-        if self.data.empty:
-            logger.error("Aggregates data is empty. Cannot select top tickers.")
+        snapshot_path = SP500_SNAPSHOT_FILE
+        if not snapshot_path.exists():
+            logger.error(f"S&P 500 historic snapshot file not found: {snapshot_path}")
             return
-        
-        self.data["avg_price"] = (self.data["high"] + self.data["low"]) / 2
-        self.data["cash_value"] = self.data["volume"] * self.data["avg_price"]
-        ticker_stats = (
-            self.data.groupby("ticker")["cash_value"]
-            .agg(total_cash_value="sum", active_days="count")
-            .reset_index()
-        )
-        ticker_stats["ADDV"] = ticker_stats["total_cash_value"] / ticker_stats["active_days"]
-        ranked_tickers = ticker_stats.sort_values("ADDV", ascending=False)["ticker"].tolist()
-        logger.info(f"Ranked {len(ranked_tickers)} tickers.")
 
-        self.top_stocks = asyncio.run(self.filter_top_n_to_common_stocks(ranked_tickers))
+        try:
+            snap_df = pd.read_feather(snapshot_path)
 
-        # Ensure proxies are retained if they exist in the dataset
-        for proxy in [MARKET_PROXY, MONEY_MARKET_PROXY]:
-            if proxy in self.data["ticker"].unique() and proxy not in self.top_stocks:
-                self.top_stocks.append(proxy)
+            # Ensure date is a proper datetime type
+            # If it's already datetime64, this line won't hurt.
+            snap_df['date'] = pd.to_datetime(snap_df['date'], errors='coerce')
 
-        # Now reduce self.data to just the top_stocks and proxies
-        if self.top_stocks:
+            # Convert START_DATE and END_DATE (which might be datetime.date) to Timestamp
+            start_ts = pd.Timestamp(START_DATE)
+            end_ts = pd.Timestamp(END_DATE)
+
+            # Filter by date range
+            # Now both snap_df['date'] and start_ts/end_ts are Timestamps
+            snap_df = snap_df[(snap_df["date"] >= start_ts) & (snap_df["date"] <= end_ts)]
+
+            if snap_df.empty:
+                logger.warning("No S&P 500 data in the given backtest range. Selecting no top stocks.")
+                self.top_stocks = []
+                return
+
+            # Collect all tickers from these rows
+            all_tickers = set()
+            for _, row in snap_df.iterrows():
+                day_tickers_str = row["tickers"]
+                if pd.isna(day_tickers_str):
+                    continue
+                day_tickers = day_tickers_str.split(",")
+                day_tickers = [t.strip() for t in day_tickers if t.strip() != ""]
+                all_tickers.update(day_tickers)
+
+            self.top_stocks = list(all_tickers)
+
+            # Ensure proxies are included if present in the dataset
+            for proxy in [MARKET_PROXY, MONEY_MARKET_PROXY]:
+                if proxy in self.data["ticker"].unique() and proxy not in self.top_stocks:
+                    self.top_stocks.append(proxy)
+
             self.data = self.data[self.data["ticker"].isin(self.top_stocks)].copy()
-            logger.info(f"Reduced self.data to {len(self.data)} rows for top {len(self.top_stocks)} tickers (including proxies).")
-        else:
-            logger.error("No top stocks selected. Data remains unchanged.")
+            logger.info(f"Selected {len(self.top_stocks)} tickers from S&P 500 snapshot within backtest period.")
+            logger.info(f"Reduced self.data to {len(self.data)} rows for these tickers.")
+        except Exception as e:
+            logger.error(f"Error processing S&P 500 snapshot: {e}")
 
     def adjust_for_corporate_actions(self):
         logger.info("Adjusting data for corporate actions...")
@@ -202,22 +162,10 @@ class AggregatesProcessor:
                 proxies_data = pd.read_feather(proxies_path)
                 unique_tickers = top_stocks_data["ticker"].nunique()
 
-                # Check if number of top stocks matches expected
-                # Remember we might have fewer if no full top_n_tickers were found
-                # but let's not raise errors here unnecessarily.
-                # Instead, just log a warning if less than top_n_tickers found.
-                if unique_tickers != self.top_n_tickers:
-                    logger.warning(
-                        f"Top stocks file has {unique_tickers} tickers; expected {self.top_n_tickers}. "
-                        f"This may be due to availability. Reprocessing may be needed."
-                    )
-
-                # Check if proxies exist
-                proxies_tickers = proxies_data["ticker"].unique()
-                if MARKET_PROXY not in proxies_tickers:
+                if MARKET_PROXY not in proxies_data["ticker"].unique():
                     logger.warning(f"Missing market proxy '{MARKET_PROXY}' in proxies. Reprocessing.")
                     raise ValueError("Invalid proxies file.")
-                if MONEY_MARKET_PROXY not in proxies_tickers:
+                if MONEY_MARKET_PROXY not in proxies_data["ticker"].unique():
                     logger.warning(f"Missing money market proxy '{MONEY_MARKET_PROXY}' in proxies. Reprocessing.")
                     raise ValueError("Invalid proxies file.")
 
@@ -244,7 +192,7 @@ class AggregatesProcessor:
             logger.error("Data not clean.")
             return
 
-        self.select_top_tickers()
+        self.select_top_stocks_from_sp500()
         self.adjust_for_corporate_actions()
         self.save_processed_data()
 

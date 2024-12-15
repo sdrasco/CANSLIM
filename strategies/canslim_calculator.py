@@ -182,12 +182,12 @@ def calculate_canslim_indicators(proxies_df: pd.DataFrame,
     # Defaults if not provided
     if criteria_config is None:
         criteria_config = {
-            "C": {"quarterly_growth_threshold": 0.25},
-            "A": {"annual_growth_threshold": 0.2},
+            "C": {"quarterly_growth_threshold": 0.1},
+            "A": {"annual_growth_threshold": 0.1},
             "N": {"lookback_period": 252},
-            "S": {"volume_factor": 1.5},
+            "S": {"volume_factor": 1.25},
             "L": {"return_diff_threshold": 0.0},
-            "I": {"volume_factor": 1.5},
+            "I": {"volume_factor": 1.25},
             "M": {"use_ma_cross": True}
         }
 

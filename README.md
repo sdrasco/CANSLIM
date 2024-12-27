@@ -10,6 +10,7 @@ We’re starting with William O’Neil’s CANSLIM strategy.  He seemed ripe for
 
 ## Project Progress Highlights
 
+- **2024-12-27**: Pure CANSLIM tests are done, it performs badly, pretty much like O'Neil's FFTY ETF.  Moving on to new strategies.
 - **2024-12-12**: While working on index and market proxy consistancy, made an [interactive visualization of the S&P 500 constituents over time](https://backboard.uk/html/sp500.html).
 - **2024-12-11**: Each of CANSLIM validated. [Reports](https://backboard.uk/html/backtest_report.html) now more descriptive. Metrics use money market proxy.
 - **2024-12-10**: Now have unique reports for each strategy. The L and A in CANSLIM need work.

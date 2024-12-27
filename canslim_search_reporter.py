@@ -168,37 +168,37 @@ def main():
     <tr>
       <td style="padding: 8px;">C</td>
       <td style="padding: 8px;">Current Quarterly Earnings</td>
-      <td style="padding: 8px;">EPS growth &gt; 20% YOY</td>
+      <td style="padding: 8px;">Quarterly year-over-year EPS growth &gt; threshold</td>
     </tr>
     <tr>
       <td style="padding: 8px;">A</td>
       <td style="padding: 8px;">Annual Earnings Growth</td>
-      <td style="padding: 8px;">5% annual EPS growth threshold</td>
+      <td style="padding: 8px;">Year-over-year EPS growth &gt; threshold</td>
     </tr>
     <tr>
       <td style="padding: 8px;">N</td>
       <td style="padding: 8px;">New High</td>
-      <td style="padding: 8px;">52-week high breakout</td>
+      <td style="padding: 8px;">during lookback period</td>
     </tr>
     <tr>
       <td style="padding: 8px;">S</td>
       <td style="padding: 8px;">Supply &amp; Demand</td>
-      <td style="padding: 8px;">Volume factor &gt; average daily volume</td>
+      <td style="padding: 8px;">Volume/(average daily volume) &gt; threshold</td>
     </tr>
     <tr>
       <td style="padding: 8px;">L</td>
       <td style="padding: 8px;">Leader / Laggard</td>
-      <td style="padding: 8px;">Relative strength &gt; market</td>
+      <td style="padding: 8px;">(stock_return - market_return) &gt; threshold </td>
     </tr>
     <tr>
       <td style="padding: 8px;">I</td>
       <td style="padding: 8px;">Institutional Sponsorship</td>
-      <td style="padding: 8px;">A/D ratio &gt; 1.0 (50-day window)</td>
+      <td style="padding: 8px;">A/D metric above threshold</td>
     </tr>
     <tr>
       <td style="padding: 8px;">M</td>
       <td style="padding: 8px;">Market Direction</td>
-      <td style="padding: 8px;">50-day MA &gt; 200-day MA</td>
+      <td style="padding: 8px;">(50-day MA) - (200-day MA) &gt; threshold</td>
     </tr>
   </tbody>
 </table>
@@ -207,18 +207,15 @@ def main():
   The backtest started with an initial investment of $100,000, covering just under 16 years 
   (2008-12-26 to 2024-12-06) rebalanced quarterly. We also tested weekly rebalancing, 
   but it always performed worse. Things go similarly for O'Neil's FFTY ETF, a weekly, rules-based, 
-  computer-generated stock index compiled and published by Investor's Business Daily.
+  computer-generated stock index compiled and published by Investor's Business Daily, shown against SPY just below 
+  <a href="https://www.google.com/finance/quote/FFTY:NYSEARCA?hl=en&comparison=NYSEARCA%3ASPY&window=5Y" 
+     target="_blank" style="color: #2a9d8f; text-decoration: none;">
+    from Google Finance.
+  </a>
 </p>
 
 <img src="images/compare.png" alt="Comparison of Strategies" 
      style="display: block; margin: 20px auto; max-width: 100%; border-radius: 8px;" />
-
-<p style="text-align: center; font-size: 14px; color: #555;">
-  <a href="https://www.google.com/finance/quote/FFTY:NYSEARCA?hl=en&comparison=NYSEARCA%3ASPY&window=5Y" 
-     target="_blank" style="color: #2a9d8f; text-decoration: none;">
-    image from Google Finance
-  </a>
-</p>
      """
 
     modified_html = re.sub(old_paragraph_pattern, new_paragraph.strip(), modified_html)

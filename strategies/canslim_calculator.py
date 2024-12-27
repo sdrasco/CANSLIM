@@ -204,6 +204,10 @@ def calculate_canslim_indicators(proxies_df: pd.DataFrame,
     proxies_df = proxies_df.merge(market_only[["date", "50_MA","200_MA","M"]], on="date", how="left")
     proxies_df["M"] = proxies_df["M"].fillna(False).astype(bool)
 
+    # Merge 'M' into top_stocks_df
+    top_stocks_df = top_stocks_df.merge(market_only[["date", "M"]], on="date", how="left")
+    top_stocks_df["M"] = top_stocks_df["M"].fillna(False).astype(bool)
+
     logger.info("Computing C and A from financial data...")
     ca_df = compute_c_a_from_financials(financials_df, criteria_config)
 

@@ -95,8 +95,8 @@ def main():
         # AD ratio threshold: 5 values between 1.0 and 2.0
         c_values = np.linspace(0.05, 0.25, 5)
         a_values = np.linspace(0.05, 0.25, 5)
-        vol_values = np.linspace(1.1, 2.0, 5)
-        ad_values = np.linspace(1.0, 2.0, 5)
+        vol_values = np.linspace(1.1, 2.0, 2)
+        ad_values = np.linspace(1.0, 2.0, 2)
 
         combos = list(product(c_values, a_values, vol_values, ad_values))
         # combos will have 5*5*5*5 = 625 combos, slightly more than 500 but close enough

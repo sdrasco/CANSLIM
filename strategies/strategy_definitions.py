@@ -37,6 +37,7 @@ def risk_managed_market_strategy(rebalance_date, portfolio_value, data_dict, is_
         logger.warning(f"No market data (for {MARKET_PROXY}) on {rebalance_date}, using {MONEY_MARKET_PROXY}.")
         return {MONEY_MARKET_PROXY: 1.0}
 
+    logger.info(f"Row for date {rebalance_date}:\n{row}")
     m_value = row["M"].iloc[0]
     allocation = {MARKET_PROXY: 1.0} if m_value else {MONEY_MARKET_PROXY: 1.0}
     logger.debug(f"risk_managed_market_strategy returning allocation: {allocation}")
@@ -132,3 +133,69 @@ def canslim_strategy(rebalance_date, portfolio_value, data_dict, is_first_rebala
     })
 
     return allocation
+
+def canslim_sp500_hybrid_option_a(rebalance_date, portfolio_value, data_dict, is_first_rebalance=False):
+    """
+    Hybrid S&P/CANSLIM (Option A):
+    1) Must be in the S&P 500 on rebalance_date.
+    2) Must have either C==True OR A==True (moderate EPS growth).
+    3) Must have L==True (leader vs. the market).
+    4) Ignore M entirely (no market-timing filter).
+    If no stocks pass, default to MARKET_PROXY (e.g. SPY).
+    Equal weighting among all passing stocks.
+    """
+    logger.debug(f"canslim_sp500_hybrid_option_a called for {rebalance_date} with portfolio_value={portfolio_value}, is_first_rebalance={is_first_rebalance}")
+
+    # Unpack data from data_dict
+    sp500_snapshot_df = data_dict.get("sp500_snapshot_df")
+    top_stocks_df = data_dict.get("top_stocks_df")
+    
+    # Basic checks
+    if sp500_snapshot_df is None or top_stocks_df is None:
+        logger.error("Missing sp500_snapshot_df or top_stocks_df in data_dict. Defaulting to MARKET_PROXY.")
+        return {MARKET_PROXY: 1.0}
+
+    # Filter top_stocks_df by rebalance_date
+    search_date = pd.Timestamp(rebalance_date)
+    candidates = top_stocks_df[top_stocks_df["date"] == search_date].copy()
+
+    # Get S&P 500 membership for this date
+    sp500_row = sp500_snapshot_df.loc[sp500_snapshot_df["date"] == search_date]
+    if sp500_row.empty:
+        logger.warning(f"No S&P snapshot for {rebalance_date}, defaulting to {MARKET_PROXY}.")
+        return {MARKET_PROXY: 1.0}
+
+    sp500_tickers_str = sp500_row["tickers"].iloc[0]
+    sp500_tickers = set(sp500_tickers_str.split(","))
+
+    # Only keep tickers that are in the S&P 500 on this date
+    candidates = candidates[candidates["ticker"].isin(sp500_tickers)]
+    logger.debug(f"{len(candidates)} candidates after restricting to S&P 500 membership.")
+
+    # We need the columns C, A, and L
+    required_cols = ["C", "A", "L"]
+    for col in required_cols:
+        if col not in candidates.columns:
+            logger.error(f"Missing column '{col}' in top_stocks_df; defaulting to MARKET_PROXY.")
+            return {MARKET_PROXY: 1.0}
+
+    # Filter: must have (C == True OR A == True) AND L == True
+    filtered = candidates[(candidates["L"] == True) & ((candidates["C"] == True) | (candidates["A"] == True))]
+    logger.debug(f"{len(filtered)} candidates remain after (C or A) & L filter.")
+
+    # If nothing qualifies, default to S&P 500 proxy
+    if filtered.empty:
+        logger.debug("No candidates pass the filter, defaulting to MARKET_PROXY.")
+        return {MARKET_PROXY: 1.0}
+
+    # Example weighting approach: equally weight all passing tickers
+    chosen_tickers = filtered["ticker"].unique().tolist()
+    weight = 1.0 / len(chosen_tickers)
+    allocation = {tkr: weight for tkr in chosen_tickers}
+
+    logger.debug(f"canslim_sp500_hybrid_option_a returning allocation: {allocation}")
+    return allocation
+
+
+
+

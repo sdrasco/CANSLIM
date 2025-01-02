@@ -31,23 +31,29 @@ def load_proxies():
         logger.error(f"Proxies data missing required columns: {missing}")
         return pd.DataFrame()
 
-    return df
+    # set date to index
+    df = convert_date_to_index(df)
 
+    return df
 
 def load_top_stocks():
     """
-    Load the top stocks data from feather file.
-    Returns a pandas DataFrame with daily price, volume, and CANSLI columns.
+    Load the top stocks data from feather file and reindex by date as DatetimeIndex.
     """
     top_stocks_path = DATA_DIR / "top_stocks.feather"
     if not top_stocks_path.exists():
         logger.error(f"Top stocks file not found: {top_stocks_path}")
         return pd.DataFrame()
 
+    # read in the file
     df = pd.read_feather(top_stocks_path)
-    logger.info(f"Loaded top stocks data from {top_stocks_path}, shape: {df.shape}")
-    return df
 
+    # set date to index
+    df = convert_date_to_index(df)
+
+    # log results
+    logger.info(f"Loaded top stocks data from {top_stocks_path}, shape: {df.shape}, index type: {type(df.index)}")
+    return df
 
 def load_financials():
     """
@@ -62,4 +68,16 @@ def load_financials():
 
     df = pd.read_feather(financials_path)
     logger.info(f"Loaded financials data from {financials_path}, shape: {df.shape}")
+    return df
+
+def convert_date_to_index(df):
+    # Convert date column to actual datetime
+    if not pd.api.types.is_datetime64_any_dtype(df["date"]):
+        df["date"] = pd.to_datetime(df["date"])
+
+    # limit dates to the day (we don't do anything intraday).
+    df["date"] = df["date"].dt.normalize()
+
+    # Now set it as the index
+    df = df.set_index("date", drop=True).sort_index()
     return df

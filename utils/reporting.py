@@ -87,23 +87,40 @@ def generate_combined_metrics_table(strategies_data):
 
 def generate_canslim_criteria_section(canslim_criteria_dict):
     """
-    Generate an HTML section summarizing the CANSLIM criteria and their parameters.
-    Now that parameters is a single numeric or string value, we no longer treat it as a dict.
+    Generate an HTML section summarizing the CANSLIM criteria and their parameters,
+    but only for the keys actually present in canslim_criteria_dict.
+    
+    This function is now flexible. If a given key's value is:
+      - a float/int/string, we treat it as a simple parameter 
+        with no custom name/description, 
+      - a dict with "name"/"description"/"parameters", we display 
+        that more detailed info,
+      - anything else, we do a fallback approach.
     """
     if not canslim_criteria_dict:
         return ""
 
     rows = ""
-    for letter, info in canslim_criteria_dict.items():
-        name = info.get("name", letter)
-        description = info.get("description", "")
-        param = info.get("parameters", "N/A")
+    for letter, value in canslim_criteria_dict.items():
+        # If it's a nested dict with "name", "description", and "parameters" 
+        # keys, use that. Otherwise, treat 'value' as the param itself.
+        if isinstance(value, dict):
+            # Safely access subfields with .get
+            name = value.get("name", letter)
+            description = value.get("description", "(No description)")
+            param = value.get("parameters", "N/A")
+        else:
+            # Value is presumably float/int/str/etc.
+            name = letter
+            description = "(No description provided)"
+            param = value
         
         # Convert numeric params to a nicely formatted string
         if isinstance(param, float):
             param_str = f"{param:.2f}"
+        elif isinstance(param, int):
+            param_str = str(param)
         else:
-            # If param is not float (e.g., 'N/A' or a string), just convert to string
             param_str = str(param)
 
         rows += f"""

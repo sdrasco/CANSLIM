@@ -1,136 +1,160 @@
 # backtesting/backtester.py
+"""
+Uses pivoted "close" matrices for faster get_price lookups.
+Adds checks to ensure strategies don't exceed 100% allocation,
+handle leftover cash, or go negative if shorting isn't intended.
+"""
 
 import logging
 import pandas as pd
 from datetime import timedelta
-from config.settings import INITIAL_FUNDS, MARKET_PROXY, MONEY_MARKET_PROXY, REBALANCE_FREQUENCY
+from config.settings import (
+    INITIAL_FUNDS, MARKET_PROXY, MONEY_MARKET_PROXY, REBALANCE_FREQUENCY
+)
 from utils.logging_utils import configure_logging
 
-# Configure logging
 configure_logging()
 logger = logging.getLogger(__name__)
 
-def run_backtest(strategy_func, proxies_df, top_stocks_df, rebalance_dates, initial_funds=INITIAL_FUNDS, data_dict=None):
-    """
-    Run a backtest for a given strategy.
-
-    Parameters:
-        strategy_func (callable): The strategy function that takes 
-                                  (rebalance_date, portfolio_value, data_dict, is_first_rebalance)
-                                  and returns an allocation dict {ticker: weight}.
-        proxies_df (pd.DataFrame): Combined DataFrame with both MARKET_PROXY and MONEY_MARKET_PROXY tickers.
-                                   Must have columns: date, ticker, close.
-        top_stocks_df (pd.DataFrame): Top stocks data with date, ticker, close, and CANSLI columns.
-        rebalance_dates (list of date): The dates on which to rebalance the portfolio.
-        initial_funds (float): The initial amount of money to start with.
-        data_dict (dict, optional): A dictionary to pass additional data to the strategy. The run_backtest
-                                    will ensure `proxies_df` and `top_stocks_df` are in this dict.
-
-    Returns:
-        portfolio_history (pd.DataFrame): DataFrame with columns ['date', 'portfolio_value'] representing the daily value.
-    """
-
-    # If no data_dict is provided, create an empty one
+def run_backtest(
+    strategy_func,
+    proxies_df,
+    top_stocks_df,
+    rebalance_dates,
+    initial_funds=INITIAL_FUNDS,
+    data_dict=None
+):
     if data_dict is None:
         data_dict = {}
 
-    # Ensure proxies_df and top_stocks_df are in data_dict
+    proxies_reset = proxies_df.reset_index()
+    if "ticker" not in proxies_reset.columns or "close" not in proxies_reset.columns:
+        logger.error("proxies_df missing required columns 'ticker' or 'close'.")
+        return pd.DataFrame()
+
+    proxies_close_matrix = proxies_reset.pivot(
+        index="date", columns="ticker", values="close"
+    )
+
+    top_stocks_reset = top_stocks_df.reset_index()
+    if "ticker" not in top_stocks_reset.columns or "close" not in top_stocks_reset.columns:
+        logger.error("top_stocks_df missing required columns 'ticker' or 'close'.")
+        return pd.DataFrame()
+
+    top_stocks_close_matrix = top_stocks_reset.pivot(
+        index="date", columns="ticker", values="close"
+    )
+
+    proxies_close_matrix.index = pd.to_datetime(proxies_close_matrix.index)
+    proxies_close_matrix.sort_index(inplace=True)
+    top_stocks_close_matrix.index = pd.to_datetime(top_stocks_close_matrix.index)
+    top_stocks_close_matrix.sort_index(inplace=True)
+
     data_dict["proxies_df"] = proxies_df
     data_dict["top_stocks_df"] = top_stocks_df
-
-    proxies_df = proxies_df.sort_values(["date", "ticker"])
-    top_stocks_df = top_stocks_df.sort_values(["date", "ticker"])
 
     start_date = rebalance_dates[0]
     end_date = rebalance_dates[-1]
 
-    max_available_date = proxies_df["date"].max()
-    if end_date > max_available_date.date():
-        logger.warning(f"End date {end_date} beyond available market data ({max_available_date.date()}), truncating.")
-        end_date = max_available_date.date()
+    max_available_timestamp = proxies_close_matrix.index.max()
+    if pd.Timestamp(end_date) > max_available_timestamp:
+        logger.warning(
+            f"End date {end_date} is beyond available market data ({max_available_timestamp.date()}), truncating."
+        )
+        end_date = max_available_timestamp.date()
 
-    trading_days = proxies_df[(proxies_df["date"] >= pd.to_datetime(start_date)) &
-                              (proxies_df["date"] <= pd.to_datetime(end_date))]["date"].unique()
-
-    trading_days = pd.to_datetime(sorted(trading_days))
+    mask = (
+        (proxies_close_matrix.index >= pd.to_datetime(start_date)) &
+        (proxies_close_matrix.index <= pd.to_datetime(end_date))
+    )
+    trading_days = proxies_close_matrix.index[mask].unique()
+    trading_days = sorted(trading_days)
 
     portfolio_value = initial_funds
     holdings = {}
 
-    def get_price(date, ticker):
-        if ticker == MARKET_PROXY or ticker == MONEY_MARKET_PROXY:
-            # Filter proxies_df by date and ticker
-            row = proxies_df[(proxies_df["date"] == date) & (proxies_df["ticker"] == ticker)]
+    def get_price(timestamp, ticker):
+        if ticker in [MARKET_PROXY, MONEY_MARKET_PROXY]:
+            mat = proxies_close_matrix
         else:
-            # For regular stocks, filter top_stocks_df
-            row = top_stocks_df[(top_stocks_df["date"] == date) & (top_stocks_df["ticker"] == ticker)]
+            mat = top_stocks_close_matrix
 
-        if row.empty:
-            logger.debug(f"No price data for {ticker} on {date}, returning None.")
+        if (timestamp not in mat.index) or (ticker not in mat.columns):
+            logger.debug(f"No price data for {ticker} at {timestamp}, returning None.")
             return None
-        return row["close"].iloc[0]
 
-    def compute_portfolio_value(date, holdings):
+        price = mat.loc[timestamp, ticker]
+        if pd.isna(price):
+            return None
+        return price
+
+    def compute_portfolio_value(timestamp, current_holdings):
         val = 0.0
-        for tkr, sh in holdings.items():
-            price = get_price(date, tkr)
+        for tkr, shares in current_holdings.items():
+            price = get_price(timestamp, tkr)
             if price is not None:
-                val += sh * price
+                val += shares * price
             else:
-                logger.debug(f"Missing price for {tkr} on {date}, treating as 0 in portfolio value.")
+                logger.debug(f"No price for {tkr} at {timestamp}, treating as 0.")
         return val
 
     portfolio_records = []
     first_rebalance_done = False
 
-    for current_date in trading_days:
-        current_date = pd.to_datetime(current_date).normalize()
+    for current_timestamp in trading_days:
+        current_date = current_timestamp.date()
 
-        if current_date.date() in rebalance_dates:
-            # Log rebalancing at INFO level, including the start_date and REBALANCE_FREQUENCY
-            logger.debug(
-                f"Rebalancing portfolio on {current_date.date()}, frequency: {REBALANCE_FREQUENCY}"
-            )
-
-            logger.debug(f"Rebalance date {current_date.date()} encountered.")
-            portfolio_value = compute_portfolio_value(current_date, holdings)
+        if current_date in rebalance_dates:
+            logger.debug(f"Rebalancing portfolio on {current_date} ({REBALANCE_FREQUENCY}).")
+            portfolio_value = compute_portfolio_value(current_timestamp, holdings)
             logger.debug(f"Portfolio value before rebalancing: {portfolio_value}")
 
-            # Determine if this is the first rebalance
             is_first_rebalance = not first_rebalance_done
-
-            # If this is the first rebalance, override the portfolio_value with initial_funds
             if is_first_rebalance:
-                logger.debug(f"First rebalance day {current_date.date()}: overriding portfolio_value with initial_funds={initial_funds}")
+                logger.debug(f"First rebalance day {current_date}: using initial_funds={initial_funds}")
                 portfolio_value = initial_funds
 
-            # Call the strategy function with data_dict included
-            allocation = strategy_func(current_date.date(), portfolio_value, data_dict, is_first_rebalance=is_first_rebalance)
-            logger.debug(f"Strategy allocation on {current_date.date()}: {allocation}")
+            allocation = strategy_func(current_date, portfolio_value, data_dict, is_first_rebalance)
+            logger.debug(f"Strategy allocation on {current_date}: {allocation}")
+
+            sum_of_weights = sum(allocation.values())
+            if sum_of_weights > 1.000001:
+                logger.warning(
+                    f"Strategy allocated {sum_of_weights:.4f}, which is >1.0. "
+                    "Potential over-investment. Verify logic."
+                )
+
+            negative_allocs = [t for t, w in allocation.items() if w < 0]
+            if negative_allocs:
+                logger.warning(
+                    f"Negative weights detected for tickers: {negative_allocs}. "
+                    "Potential shorting if not intended."
+                )
+
+            leftover_cash = (1.0 - sum_of_weights) * portfolio_value
+            logger.debug(f"Leftover cash (uninvested) => {leftover_cash:.2f}")
 
             new_holdings = {}
             for tkr, weight in allocation.items():
-                price = get_price(current_date, tkr)
+                price = get_price(current_timestamp, tkr)
                 if price is None or price <= 0:
-                    logger.warning(f"Invalid or missing price for {tkr} on {current_date.date()}, skipping ticker.")
+                    logger.warning(f"No valid price for {tkr} on {current_date}, skipping.")
                     continue
                 shares = (weight * portfolio_value) / price
                 new_holdings[tkr] = shares
-                logger.debug(f"Allocated {shares} shares of {tkr} at price {price}")
+                logger.debug(f"Allocated {shares} shares of {tkr} at {price}")
 
             holdings = new_holdings
-            logger.debug(f"New holdings after rebalancing: {holdings}")
-
             first_rebalance_done = True
 
-        daily_value = compute_portfolio_value(current_date, holdings)
-        logger.debug(f"Portfolio value on {current_date.date()}: {daily_value}")
-        portfolio_records.append({"date": current_date, "portfolio_value": daily_value})
+        daily_value = compute_portfolio_value(current_timestamp, holdings)
+        logger.debug(f"Portfolio value on {current_date}: {daily_value}")
+        portfolio_records.append({"date": current_timestamp, "portfolio_value": daily_value})
 
     portfolio_history = pd.DataFrame(portfolio_records)
     portfolio_history.sort_values("date", inplace=True)
     portfolio_history.reset_index(drop=True, inplace=True)
-    logger.debug("Final portfolio history:")
-    logger.debug(portfolio_history.head(10))
+    logger.debug("Final portfolio history (first few rows):")
+    logger.debug(portfolio_history.head(5))
 
     return portfolio_history

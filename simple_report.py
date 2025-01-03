@@ -158,11 +158,11 @@ def _build_html_report(summary_df: pd.DataFrame, timeseries_df: pd.DataFrame) ->
 def _strategy_descriptions_section() -> str:
     text = """
         <div class='strategy-descriptions'>
-        <p>Initial investment of $100,000. Test for 16 years (2008-12-26 to 2024-12-06) rebalanced quarterly. On each rebalance date, assign allocation weights as follows:</p>
+        <p>Initial investment of $100,000. Test for 16 years (2008-12-26 to 2024-12-06). Rebalance quarterly as follows:</p>
           <p>Benchmarks:</p>
 
           <p><strong>(1) Market Only:</strong> weight(SPY) = 1</p>
-          <p><strong>(2) Risk-Managed Market:</strong> weight(SPY) = 1 if (50-day MA of SPY) &gt; (200-day MA of SPY); otherwise weight(BIL) = 1.</p>
+          <p><strong>(2) Risk-Managed Market:</strong> weight(SPY) = 1, if (50-day MA of SPY) &gt; (200-day MA of SPY); otherwise weight(BIL) = 1.</p>
 
           <p>Simple Rebalancings: For all stocks in the S&amp;P 500 over the previous quarter:</p>
           <p><strong>(3) Flattened:</strong> weight(i) = 1/N, where N is the number of stocks in the S&amp;P 500.</p>

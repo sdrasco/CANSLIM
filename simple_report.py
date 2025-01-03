@@ -158,7 +158,7 @@ def _build_html_report(summary_df: pd.DataFrame, timeseries_df: pd.DataFrame) ->
 def _strategy_descriptions_section() -> str:
     text = """
         <div class='strategy-descriptions'>
-        <p>The backtest started with an initial investment of $100,000, covering just under 16 years (2008-12-26 to 2024-12-06) rebalanced quarterly. On each rebalance date, we assign allocation weights as follows:</p>
+        <p>Initial investment of $100,000. Test for 16 years (2008-12-26 to 2024-12-06) rebalanced quarterly. On each rebalance date, assign allocation weights as follows:</p>
           <p>Benchmarks:</p>
 
           <p><strong>(1) Market Only:</strong> weight(SPY) = 1</p>

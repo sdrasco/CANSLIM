@@ -22,5 +22,7 @@ Icon?
 *.tmp
 
 # Ignore specific data files and directories
+*.pkl
+html/*.pkl
 data/*.feather
 data/us_stocks_sip/

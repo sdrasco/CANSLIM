@@ -119,20 +119,20 @@ def run_backtest(
 
             sum_of_weights = sum(allocation.values())
             if sum_of_weights > 1.000001:
-                logger.warning(
+                logger.error(
                     f"Strategy allocated {sum_of_weights:.4f}, which is >1.0. "
                     "Potential over-investment. Verify logic."
                 )
 
             negative_allocs = [t for t, w in allocation.items() if w < 0]
             if negative_allocs:
-                logger.warning(
+                logger.error(
                     f"Negative weights detected for tickers: {negative_allocs}. "
                     "Potential shorting if not intended."
                 )
 
             leftover_cash = (1.0 - sum_of_weights) * portfolio_value
-            logger.debug(f"Leftover cash (uninvested) => {leftover_cash:.2f}")
+            logger.info(f"Leftover cash (uninvested) = {leftover_cash:.2f}")
 
             new_holdings = {}
             for tkr, weight in allocation.items():
